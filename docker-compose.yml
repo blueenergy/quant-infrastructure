@@ -1,0 +1,135 @@
+services:
+  # ========================
+  # MongoDB 数据库
+  # ========================
+  mongodb:
+    image: mongo:6.0
+    container_name: quant-mongodb
+    hostname: mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-changeme}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-finance}
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+      - ./mongodb/mongod.conf:/etc/mongod.conf:ro
+      - ./mongodb/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    command: mongod --config /etc/mongod.conf --auth
+    mem_limit: 1536m          # 1.5GB 限制
+    mem_reservation: 800m     # 预留 800MB
+    cpus: '2.0'               # 限制 2 核
+    restart: unless-stopped
+    networks:
+      quant-network:
+        ipv4_address: 172.20.0.2
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ========================
+  # Redis 内存数据库
+  # ========================
+  redis:
+    image: redis:7-alpine
+    container_name: quant-redis
+    hostname: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    mem_limit: 512m           # 512MB 限制
+    mem_reservation: 100m     # 预留 100MB
+    cpus: '0.5'               # 限制 0.5 核
+    restart: unless-stopped
+    networks:
+      quant-network:
+        ipv4_address: 172.20.0.3
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ========================
+  # Prometheus 监控（可选）
+  # ========================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: quant-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    mem_limit: 200m
+    cpus: '0.5'
+    restart: unless-stopped
+    networks:
+      - quant-network
+    profiles:
+      - monitoring
+
+  # ========================
+  # Grafana 可视化（可选）
+  # ========================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: quant-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-clock-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    mem_limit: 200m
+    cpus: '0.5'
+    restart: unless-stopped
+    networks:
+      - quant-network
+    profiles:
+      - monitoring
+    depends_on:
+      - prometheus
+
+# ========================
+# 数据卷
+# ========================
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# ========================
+# 网络
+# ========================
+networks:
+  quant-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
