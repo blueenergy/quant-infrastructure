@@ -11,10 +11,40 @@
 
 ## 🚀 快速开始
 
+### 0. 新服务器初始化 (首次部署)
+
+如果是在全新服务器上部署，首先运行初始化脚本：
+
+```bash
+# 下载初始化脚本
+curl -O https://raw.githubusercontent.com/.../setup-server.sh
+# 或者如果已克隆仓库
+cd quant-infrastructure
+
+# 以 root 权限运行
+sudo bash scripts/setup-server.sh
+```
+
+**该脚本会自动：**
+- ✅ 创建 `shuyolin` 用户和组
+- ✅ 配置 sudo 权限
+- ✅ 创建项目目录结构 (`~/trading/...`)
+- ✅ 设置文件权限
+- ✅ 安装基础依赖 (Python3, Git, GCC 等)
+- ✅ 配置防火墙端口 (27017, 6379, 5000, 3001, 5173)
+- ✅ 安装 Docker (可选)
+- ✅ 创建快速启动脚本
+
+**运行后切换用户：**
+```bash
+su - shuyolin
+```
+
 ### 1. 克隆仓库
 
 ```bash
-git clone <repository-url>
+cd ~/trading
+git clone <repository-url> quant-infrastructure
 cd quant-infrastructure
 ```
 
