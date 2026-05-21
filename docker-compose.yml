@@ -3,7 +3,7 @@ services:
   # MongoDB 数据库
   # ========================
   mongodb:
-    image: mongo:6.0
+    image: mongo:7.0
     container_name: quant-mongodb
     hostname: mongodb
     ports:
@@ -13,8 +13,8 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-changeme}
       MONGO_INITDB_DATABASE: ${MONGO_DB:-finance}
     volumes:
-      - mongodb_data:/data/db
-      - mongodb_config:/data/configdb
+      - mongodb7_data:/data/db
+      - mongodb7_config:/data/configdb
       - ./mongodb/mongod.conf:/etc/mongod.conf:ro
       - ./mongodb/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     command: mongod --config /etc/mongod.conf --auth
@@ -23,10 +23,9 @@ services:
     cpus: '2.0'               # 限制 2 核
     restart: unless-stopped
     networks:
-      quant-network:
-        ipv4_address: 172.20.0.2
+      - quant-network
     healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD-SHELL", "mongosh --quiet -u \"$${MONGO_INITDB_ROOT_USERNAME}\" -p \"$${MONGO_INITDB_ROOT_PASSWORD}\" --authenticationDatabase admin --eval \"db.adminCommand('ping')\""]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -50,8 +49,7 @@ services:
     cpus: '0.5'               # 限制 0.5 核
     restart: unless-stopped
     networks:
-      quant-network:
-        ipv4_address: 172.20.0.3
+      - quant-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
@@ -111,9 +109,9 @@ services:
 # 数据卷
 # ========================
 volumes:
-  mongodb_data:
+  mongodb7_data:
     driver: local
-  mongodb_config:
+  mongodb7_config:
     driver: local
   redis_data:
     driver: local
@@ -128,8 +126,3 @@ volumes:
 networks:
   quant-network:
     driver: bridge
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.20.0.0/16
-          gateway: 172.20.0.1

@@ -31,9 +31,14 @@ if [ ! -f .env ]; then
     read -p "Press Enter after you have updated .env file..."
 fi
 
+set -a
+source .env
+set +a
+
 # 确认部署
 echo "📋 Deployment Configuration:"
-echo "  • MongoDB: mongo:6.0"
+echo "  • MongoDB: mongo:7.0"
+echo "    - Auth: enabled"
 echo "  • Redis: redis:7-alpine"
 echo "  • Memory Limits:"
 echo "    - MongoDB: 1.5GB (reserved: 800MB)"
@@ -68,13 +73,13 @@ echo ""
 
 # 检查 MongoDB
 echo -n "  MongoDB... "
-if docker exec quant-mongodb mongo --eval "db.adminCommand('ping')" --quiet > /dev/null 2>&1; then
+if docker exec quant-mongodb mongosh --quiet -u "${MONGO_USERNAME:-admin}" -p "${MONGO_PASSWORD:-changeme}" --authenticationDatabase admin --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
     echo "✅"
 else
     echo "❌ MongoDB is not responding"
     echo ""
     echo "Logs:"
-    docker-compose logs mongodb
+    docker compose logs mongodb
     exit 1
 fi
 
@@ -86,7 +91,7 @@ else
     echo "❌ Redis is not responding"
     echo ""
     echo "Logs:"
-    docker-compose logs redis
+    docker compose logs redis
     exit 1
 fi
 
@@ -111,7 +116,7 @@ echo "  • MongoDB: mongodb://localhost:27017"
 echo "  • Redis:   redis://localhost:6379"
 echo ""
 echo "🔐 Default Credentials (change in .env):"
-echo "  • MongoDB: admin / changeme-use-strong-password"
+echo "  • MongoDB: ${MONGO_USERNAME:-admin} / (password in .env)"
 echo "  • Redis:   (password in .env)"
 echo ""
 echo "📖 Useful Commands:"

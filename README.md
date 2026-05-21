@@ -4,10 +4,14 @@
 
 ## 📋 组件
 
-- **MongoDB 6.0**: 主数据库，存储历史数据、交易信号、持仓等
+- **MongoDB 7.0**: 主数据库，存储历史数据、交易信号、持仓等
 - **Redis 7**: 内存数据库，用于实时 tick 数据缓存和 Pub/Sub
 - **Prometheus** (可选): 监控系统
 - **Grafana** (可选): 可视化面板
+
+### Kubernetes / K3s（应用栈）
+
+业务服务（API、Analyzer、前端等）的 Kustomize 清单见 **[k8s/quant-finance-stack/README.md](./k8s/quant-finance-stack/README.md)**，可与本仓库 Docker Compose 基础设施并行使用（Mongo/Redis 仍可用 Compose 部署在集群外或单独命名空间）。
 
 ## 🚀 快速开始
 
@@ -72,7 +76,7 @@ docker-compose up -d
 
 ```bash
 # 测试 MongoDB
-mongo mongodb://admin:password@localhost:27017/finance
+mongosh mongodb://admin:password@localhost:27017/finance?authSource=admin
 
 # 测试 Redis
 redis-cli -h localhost -p 6379 ping
@@ -82,8 +86,8 @@ redis-cli -h localhost -p 6379 ping
 
 | 服务 | 地址 | 默认端口 |
 |-----|------|---------|
-| MongoDB | `mongodb://172.20.0.2:27017` | 27017 |
-| Redis | `redis://172.20.0.3:6379` | 6379 |
+| MongoDB | `mongodb://localhost:27017` | 27017 |
+| Redis | `redis://localhost:6379` | 6379 |
 | Prometheus | `http://localhost:9090` | 9090 |
 | Grafana | `http://localhost:3000` | 3000 |
 
@@ -92,8 +96,7 @@ redis-cli -h localhost -p 6379 ping
 **MongoDB**:
 - 用户名: `admin` (root)
 - 密码: 在 `.env` 中设置
-- 数据库: `finance`
-- 应用用户: `quant_user`
+- 连接串: `mongodb://admin:<password>@localhost:27017/?authSource=admin`
 
 **Redis**:
 - 密码: 在 `.env` 中设置
@@ -102,7 +105,7 @@ redis-cli -h localhost -p 6379 ping
 - 用户名: `admin`
 - 密码: 在 `.env` 中设置
 
-⚠️ **生产环境请务必修改默认密码！**
+⚠️ **生产环境请务必设置强密码！**
 
 ## 📊 资源限制
 
@@ -178,16 +181,16 @@ watch -n 5 ./scripts/monitor.sh
 
 ```bash
 # 进入 MongoDB
-docker exec -it quant-mongodb mongo -u admin -p password
+docker exec -it quant-mongodb mongosh -u admin -p password --authenticationDatabase admin
 
 # 进入 Redis
 docker exec -it quant-redis redis-cli
 
 # 查看 MongoDB 数据库
-docker exec quant-mongodb mongo -u admin -p password --eval "show dbs"
+docker exec quant-mongodb mongosh -u admin -p password --authenticationDatabase admin --eval "show dbs"
 
 # 查看集合
-docker exec quant-mongodb mongo finance -u admin -p password --eval "show collections"
+docker exec quant-mongodb mongosh finance -u admin -p password --authenticationDatabase admin --eval "show collections"
 
 # Redis 信息
 docker exec quant-redis redis-cli INFO
@@ -223,18 +226,18 @@ quant-infrastructure/
 
 ```bash
 # quantFinance/.env
-MONGO_URL=mongodb://admin:password@172.20.0.2:27017
+MONGO_URL=mongodb://admin:password@host.docker.internal:27017/?authSource=admin
 MONGO_DB=finance
-REDIS_URL=redis://:password@172.20.0.3:6379
+REDIS_URL=redis://:password@host.docker.internal:6379
 ```
 
 ### quant_data_engine (数据引擎)
 
 ```bash
 # quant_data_engine/.env
-MONGO_URL=mongodb://admin:password@172.20.0.2:27017
+MONGO_URL=mongodb://admin:password@host.docker.internal:27017/?authSource=admin
 MONGO_DB=finance
-REDIS_HOST=172.20.0.2
+REDIS_HOST=host.docker.internal
 REDIS_PORT=6379
 REDIS_PASSWORD=password
 ```
@@ -243,9 +246,9 @@ REDIS_PASSWORD=password
 
 ```bash
 # stock-execution-system/.env
-MONGO_URL=mongodb://admin:password@172.20.0.2:27017
+MONGO_URL=mongodb://admin:password@host.docker.internal:27017/?authSource=admin
 MONGO_DB=finance
-REDIS_URL=redis://:password@172.20.0.3:6379
+REDIS_URL=redis://:password@host.docker.internal:6379
 ```
 
 ## 🔧 故障排查
@@ -260,7 +263,7 @@ docker compose logs mongodb
 cat mongodb/mongod.conf
 
 # 检查数据卷权限
-docker volume inspect quant-infrastructure_mongodb_data
+docker volume inspect quant-infrastructure_mongodb7_data
 ```
 
 ### Redis 无法连接

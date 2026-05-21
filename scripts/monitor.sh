@@ -1,6 +1,13 @@
 #!/bin/bash
 # 资源监控脚本
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -f "${SCRIPT_DIR}/.env" ]; then
+    set -a
+    source "${SCRIPT_DIR}/.env"
+    set +a
+fi
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "📊 Quant Infrastructure Resource Monitor"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -22,8 +29,8 @@ echo ""
 # MongoDB 状态
 echo "🍃 MongoDB Status:"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-if docker exec quant-mongodb mongo --version > /dev/null 2>&1; then
-    docker exec quant-mongodb mongo admin --quiet --eval "
+if docker exec quant-mongodb mongosh --version > /dev/null 2>&1; then
+    docker exec quant-mongodb mongosh admin --quiet -u "${MONGO_USERNAME:-admin}" -p "${MONGO_PASSWORD:-changeme}" --authenticationDatabase admin --eval "
         var status = db.serverStatus();
         print('  Version: ' + status.version);
         print('  Uptime: ' + (status.uptime / 3600).toFixed(2) + ' hours');

@@ -1,32 +1,11 @@
-// MongoDB 初始化脚本
-// 创建数据库和用户
+// MongoDB initialization script.
+// The official MongoDB image creates the root user from MONGO_INITDB_* before
+// running this script. This script only creates the default database,
+// collections, and indexes.
 
-// 切换到 admin 数据库
-db = db.getSiblingDB('admin');
-
-// 使用 root 用户认证
-db.auth(
-  process.env.MONGO_INITDB_ROOT_USERNAME,
-  process.env.MONGO_INITDB_ROOT_PASSWORD
-);
-
-// 创建 finance 数据库
 db = db.getSiblingDB('finance');
 
-// 创建应用用户（读写权限）
-db.createUser({
-  user: 'quant_user',
-  pwd: 'quant_password_changeme',
-  roles: [
-    {
-      role: 'readWrite',
-      db: 'finance'
-    }
-  ]
-});
-
 print('✅ Created database: finance');
-print('✅ Created user: quant_user');
 
 // 创建常用集合和索引
 // ========================
@@ -150,7 +129,4 @@ print('MongoDB initialization completed successfully!');
 print('='.repeat(60));
 print('');
 print('Database: finance');
-print('Application User: quant_user');
-print('');
-print('⚠️  IMPORTANT: Change the default password in production!');
 print('');
