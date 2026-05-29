@@ -18,7 +18,7 @@ services:
       - ./mongodb/mongod.conf:/etc/mongod.conf:ro
       - ./mongodb/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     command: mongod --config /etc/mongod.conf --auth
-    mem_limit: 1536m          # 1.5GB 限制
+    mem_limit: 4096m          # 4GB 限制
     mem_reservation: 800m     # 预留 800MB
     cpus: '2.0'               # 限制 2 核
     restart: unless-stopped
