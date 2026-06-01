@@ -106,5 +106,5 @@ services:
 networks:
   quant-net:
     external: true
-    # 指向 quant-infrastructure 根目录下 docker-compose up 时自动创建的网络名
-    name: quant-infrastructure_quant-network
+    # 指向 infra 创建的全局网络
+    name: quant-network

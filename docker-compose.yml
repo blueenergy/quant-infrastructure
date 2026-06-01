@@ -125,4 +125,5 @@ volumes:
 # ========================
 networks:
   quant-network:
+    name: quant-network
     driver: bridge
