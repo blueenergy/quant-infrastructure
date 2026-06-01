@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  quant-api:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:latest
+    container_name: quant-api
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "3001:3001"
+    networks:
+      - quant-net
+
+  quant-mcp:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:latest
+    container_name: quant-mcp-read
+    command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3002", "--workers", "1", "--log-level", "info" ]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - ENABLE_EMBEDDED_SCHEDULER=false
+      - ENABLE_MCP_SERVER=true
+      - MCP_SERVER_MODE=read
+    ports:
+      - "3002:3002"
+    networks:
+      - quant-net
+
+  quant-mcp-actions:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:latest
+    container_name: quant-mcp-actions
+    command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3003", "--workers", "1", "--log-level", "info" ]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - ENABLE_EMBEDDED_SCHEDULER=false
+      - ENABLE_MCP_SERVER=true
+      - MCP_SERVER_MODE=actions
+    ports:
+      - "3003:3003"
+    networks:
+      - quant-net
+
+  quant-scheduler:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:latest
+    container_name: quant-scheduler
+    command: [ "python", "scheduler_runner.py" ]
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - quant-net
+
+  quant-web:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-dashboard:latest
+    container_name: quant-web
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8088:80"
+      - "8443:443"
+    networks:
+      - quant-net
+
+  quant-scorer:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer:latest
+    container_name: quant-scorer
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - quant-net
+
+  quant-data-engine:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-data-engine:latest
+    container_name: quant-data-engine
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - quant-net
+
+  backtest-worker:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/backtest-worker:latest
+    container_name: backtest-worker
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - quant-net
+
+  quant-analyzer:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-analyzer:latest
+    container_name: quant-analyzer
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - quant-net
+
+  quant-strategy-manager:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-strategy-manager:latest
+    container_name: quant-strategy-manager
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "5001:5000"
+    networks:
+      - quant-net
+
+networks:
+  quant-net:
+    external: true
+    # 指向 quant-infrastructure 根目录下 docker-compose up 时自动创建的网络名
+    name: quant-infrastructure_quant-network
