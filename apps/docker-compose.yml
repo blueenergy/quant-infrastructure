@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   quant-api:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:latest
