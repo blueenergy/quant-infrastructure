@@ -105,6 +105,25 @@ services:
     depends_on:
       - prometheus
 
+  # ========================
+  # Portainer 容器管理（可选）
+  # ========================
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: quant-portainer
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    mem_limit: 200m
+    cpus: '0.5'
+    restart: unless-stopped
+    networks:
+      - quant-network
+    profiles:
+      - management
+
 # ========================
 # 数据卷
 # ========================
@@ -118,6 +137,8 @@ volumes:
   prometheus_data:
     driver: local
   grafana_data:
+    driver: local
+  portainer_data:
     driver: local
 
 # ========================

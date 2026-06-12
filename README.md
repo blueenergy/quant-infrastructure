@@ -8,6 +8,7 @@
 - **Redis 7**: 内存数据库，用于实时 tick 数据缓存和 Pub/Sub
 - **Prometheus** (可选): 监控系统
 - **Grafana** (可选): 可视化面板
+- **Portainer** (可选): 单机 Docker 容器管理面板
 
 ### Kubernetes / K3s（应用栈）
 
@@ -90,6 +91,7 @@ redis-cli -h localhost -p 6379 ping
 | Redis | `redis://localhost:6379` | 6379 |
 | Prometheus | `http://localhost:9090` | 9090 |
 | Grafana | `http://localhost:3000` | 3000 |
+| Portainer | `http://localhost:9000` | 9000 |
 
 ## 🔐 默认凭据
 
@@ -105,6 +107,10 @@ redis-cli -h localhost -p 6379 ping
 - 用户名: `admin`
 - 密码: 在 `.env` 中设置
 
+**Portainer** (可选):
+- 首次访问 `http://localhost:9000` 时创建管理员账号
+- 使用本机 Docker socket 管理当前服务器上的容器
+
 ⚠️ **生产环境请务必设置强密码！**
 
 ## 📊 资源限制
@@ -117,6 +123,7 @@ redis-cli -h localhost -p 6379 ping
 | Redis | 512MB | 100MB | 0.5核 |
 | Prometheus | 200MB | - | 0.5核 |
 | Grafana | 200MB | - | 0.5核 |
+| Portainer | 200MB | - | 0.5核 |
 
 ## 🛠️ 常用命令
 
@@ -131,6 +138,9 @@ docker compose up -d mongodb redis
 
 # 启动监控（需要 --profile）
 docker compose --profile monitoring up -d
+
+# 启动 Portainer 管理面板（需要 --profile）
+docker compose --profile management up -d portainer
 
 # 停止服务
 docker compose stop
@@ -312,6 +322,7 @@ docker compose up -d
 3. **SSL/TLS**: 生产环境启用加密连接
 4. **定期备份**: 使用 `./scripts/backup.sh`
 5. **监控告警**: 启用 Prometheus + Grafana
+6. **Portainer 访问控制**: `9000` 端口不要直接暴露公网，建议仅允许内网、VPN 或白名单 IP 访问
 
 ## 📝 维护
 
