@@ -1,6 +1,6 @@
 services:
   quant-api:
-    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:latest
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:${QUANT_API_IMAGE_TAG:-latest}
     container_name: quant-api
     restart: unless-stopped
     env_file: .env
@@ -10,7 +10,7 @@ services:
       - quant-net
 
   quant-mcp:
-    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:latest
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:${QUANT_API_IMAGE_TAG:-latest}
     container_name: quant-mcp-read
     command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3002", "--workers", "1", "--log-level", "info" ]
     restart: unless-stopped
@@ -25,7 +25,7 @@ services:
       - quant-net
 
   quant-mcp-actions:
-    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:latest
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:${QUANT_API_IMAGE_TAG:-latest}
     container_name: quant-mcp-actions
     command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3003", "--workers", "1", "--log-level", "info" ]
     restart: unless-stopped
@@ -40,7 +40,7 @@ services:
       - quant-net
 
   quant-scheduler:
-    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:latest
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:${QUANT_API_IMAGE_TAG:-latest}
     container_name: quant-scheduler
     command: [ "python", "scheduler_runner.py" ]
     restart: unless-stopped
@@ -49,7 +49,7 @@ services:
       - quant-net
 
   quant-web:
-    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-dashboard:latest
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-dashboard:${QUANT_DASHBOARD_IMAGE_TAG:-latest}
     container_name: quant-web
     restart: unless-stopped
     env_file: .env
