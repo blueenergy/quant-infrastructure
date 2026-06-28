@@ -71,13 +71,32 @@ services:
     networks:
       - quant-net
 
+  # [MIGRATED] Mirrors CI deploy: add-host for same-host quant-api calls,
+  # logs volume, shared portfolio-research volume. Post-deploy DB maintenance
+  # runs via apps/hooks/quant-scorer-post.sh (ensure_portfolio_indexes +
+  # seed_portfolio_param_presets).
   quant-scorer:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer:${QUANT_SCORER_IMAGE_TAG:-latest}
     container_name: quant-scorer
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - env/common.env
+      - env/quant-scorer.env
+    environment:
+      - TZ=Asia/Shanghai
+      - PORTFOLIO_RESEARCH_REPORT_DIR=/app/reports/portfolio-research
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./logs/quant-scorer:/app/logs
+      - portfolio_research:/app/reports/portfolio-research
     networks:
       - quant-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   # [MIGRATED] Deployed via infra CD (deploy.sh). Mirrors the current CI deploy
   # faithfully: network_mode: host, logs volume + log rotation, layered env.
@@ -108,13 +127,57 @@ services:
     networks:
       - quant-net
 
-  quant-analyzer:
+  # [MIGRATED] 4 replicas mirroring the CI deploy loop. All share the same
+  # log dir and env files; each container gets a unique WORKER_ID (also falls
+  # back to container hostname if not set). The optional quant_data_engine
+  # source-code mount used in CI for debugging is omitted here — code ships
+  # in the image.
+  # YAML anchor keeps the 4 service blocks DRY.
+  x-analyzer-base: &analyzer-base
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-analyzer:${QUANT_ANALYZER_IMAGE_TAG:-latest}
-    container_name: quant-analyzer
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - env/common.env
+      - env/quant-analyzer.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./logs/quant-analyzer:/app/logs
     networks:
       - quant-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  quant-analyzer-1:
+    <<: *analyzer-base
+    container_name: quant-analyzer-1
+    environment:
+      TZ: Asia/Shanghai
+      WORKER_ID: analyzer-1
+
+  quant-analyzer-2:
+    <<: *analyzer-base
+    container_name: quant-analyzer-2
+    environment:
+      TZ: Asia/Shanghai
+      WORKER_ID: analyzer-2
+
+  quant-analyzer-3:
+    <<: *analyzer-base
+    container_name: quant-analyzer-3
+    environment:
+      TZ: Asia/Shanghai
+      WORKER_ID: analyzer-3
+
+  quant-analyzer-4:
+    <<: *analyzer-base
+    container_name: quant-analyzer-4
+    environment:
+      TZ: Asia/Shanghai
+      WORKER_ID: analyzer-4
 
   quant-strategy-manager:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-strategy-manager:${QUANT_STRATEGY_MANAGER_IMAGE_TAG:-latest}
@@ -125,6 +188,13 @@ services:
       - "5001:5000"
     networks:
       - quant-net
+
+volumes:
+  # Shared between quant-scorer and quant-api (portfolio research reports).
+  # quant-api mounts this once it is migrated; until then it uses its own
+  # host path — use the same named volume on migration to avoid data split.
+  portfolio_research:
+    driver: local
 
 networks:
   quant-net:
