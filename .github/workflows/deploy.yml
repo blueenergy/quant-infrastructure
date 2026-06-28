@@ -1,0 +1,133 @@
+name: Deploy app stack
+
+# ============================================================================
+# Centralized CD for the application stack (Push-style GitOps-lite).
+#
+# quant-infrastructure is the single source of truth: apps/versions.env holds
+# the desired image tags and apps/docker-compose.yml the topology. App repos
+# only do continuous DELIVERY (build + push image), then bump versions.env and
+# notify this workflow; deployment happens here.
+#
+# Triggers:
+#   - repository_dispatch (event_type: deploy): sent by app repos after they
+#     bump versions.env. client_payload.services = space/comma separated list.
+#   - workflow_dispatch: manual rollout. `services` input (blank = all).
+#   - push to apps/versions.env|docker-compose.yml|deploy.sh: validate only
+#     (no auto rollout during the migration window, to avoid touching services
+#     still owned by their own repo pipelines).
+#
+# Required secrets:
+#   VOLC_SSH_KEY, VOLC_HOST, VOLC_USER, ALIYUN_USER, ALIYUN_TOKEN
+# Optional repo variable:
+#   INFRA_REMOTE_DIR (default: ~/trading/quant-infrastructure)
+# ============================================================================
+
+on:
+  repository_dispatch:
+    types: [deploy]
+  workflow_dispatch:
+    inputs:
+      services:
+        description: "Services to deploy (space separated, blank = all)"
+        required: false
+        default: ""
+  push:
+    branches: [main]
+    paths:
+      - apps/versions.env
+      - apps/docker-compose.yml
+      - apps/deploy.sh
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate compose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render & validate compose
+        working-directory: apps
+        run: |
+          # Materialize env files from examples so `config` can resolve every
+          # service's env_file (real values are not needed for validation).
+          mkdir -p env
+          for ex in env/*.env.example; do
+            [ -e "$ex" ] && cp "$ex" "${ex%.example}"
+          done
+          # Legacy single .env still referenced by not-yet-migrated services.
+          touch .env
+          docker compose --env-file versions.env config >/dev/null
+          echo "compose config OK"
+
+  deploy:
+    name: Deploy to production
+    # Only the event types that should actually roll out.
+    if: github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch'
+    needs: [validate]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: prod-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Resolve target services
+        id: svc
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            SERVICES="${{ github.event.client_payload.services }}"
+          else
+            SERVICES="${{ github.event.inputs.services }}"
+          fi
+          # Normalize commas to spaces.
+          SERVICES="$(echo "$SERVICES" | tr ',' ' ' | xargs || true)"
+          echo "services=$SERVICES" >> "$GITHUB_OUTPUT"
+          echo "Deploying services: '${SERVICES:-<all>}'"
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VOLC_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan "${{ secrets.VOLC_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy over SSH
+        timeout-minutes: 30
+        env:
+          SERVICES: ${{ steps.svc.outputs.services }}
+          INFRA_REMOTE_DIR: ${{ vars.INFRA_REMOTE_DIR || '~/trading/quant-infrastructure' }}
+        run: |
+          run_remote() {
+            ssh -i ~/.ssh/id_ed25519 \
+              -o BatchMode=yes \
+              -o ConnectTimeout=30 \
+              -o ConnectionAttempts=3 \
+              -o StrictHostKeyChecking=no \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=6 \
+              "${{ secrets.VOLC_USER }}@${{ secrets.VOLC_HOST }}" \
+              "ALIYUN_USER='${{ secrets.ALIYUN_USER }}' \
+               ALIYUN_TOKEN='${{ secrets.ALIYUN_TOKEN }}' \
+               INFRA_REMOTE_DIR='${INFRA_REMOTE_DIR}' \
+               SERVICES='${SERVICES}' bash -s" <<'EOF'
+          set -euo pipefail
+          cd "${INFRA_REMOTE_DIR/#\~/$HOME}"
+
+          echo "[deploy] git pull desired state"
+          git fetch --quiet origin main
+          git checkout --quiet main
+          git reset --hard --quiet origin/main
+
+          echo "[deploy] running apps/deploy.sh ${SERVICES:-<all>}"
+          chmod +x apps/deploy.sh
+          ALIYUN_USER="$ALIYUN_USER" ALIYUN_TOKEN="$ALIYUN_TOKEN" \
+            ./apps/deploy.sh ${SERVICES}
+          EOF
+          }
+
+          for attempt in 1 2 3; do
+            if run_remote; then exit 0; fi
+            echo "Deploy attempt ${attempt} failed"
+            [ "$attempt" -eq 3 ] && exit 1
+            sleep $((attempt * 30))
+          done

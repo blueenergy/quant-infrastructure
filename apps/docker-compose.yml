@@ -1,4 +1,16 @@
+# ============================================================================
+# Application stack — being migrated to centralized CD (see apps/README.md).
+#
+# SOURCE OF TRUTH during migration: each repo's GitHub CI deploy job (the real
+# `docker run` on the production host). Services marked [MIGRATED] below have
+# been reconciled to that behavior and are deployed FROM HERE via deploy.sh.
+# UNVERIFIED services are aspirational placeholders kept for tag parameterization
+# only — do NOT deploy them from here until reconciled against their CI deploy.
+# ============================================================================
 services:
+  # [UNVERIFIED] not reconciled against CI deploy yet.
+  # NOTE: quant-api / quant-mcp / quant-mcp-actions / quant-scheduler all share
+  # the same quant-api image, so they share ${QUANT_API_IMAGE_TAG}.
   quant-api:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:${QUANT_API_IMAGE_TAG:-latest}
     container_name: quant-api
@@ -60,23 +72,36 @@ services:
       - quant-net
 
   quant-scorer:
-    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer:latest
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer:${QUANT_SCORER_IMAGE_TAG:-latest}
     container_name: quant-scorer
     restart: unless-stopped
     env_file: .env
     networks:
       - quant-net
 
+  # [MIGRATED] Deployed via infra CD (deploy.sh). Mirrors the current CI deploy
+  # faithfully: network_mode: host, logs volume + log rotation, layered env.
+  # The DB is remote (another machine); MONGO_URI in common.env points there.
+  # The image dockerignores .env, so config comes purely from injected env vars
+  # (no /app/.env mount needed).
   quant-data-engine:
-    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-data-engine:latest
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-data-engine:${QUANT_DATA_ENGINE_IMAGE_TAG:-latest}
     container_name: quant-data-engine
     restart: unless-stopped
-    env_file: .env
-    networks:
-      - quant-net
+    network_mode: host
+    env_file:
+      - env/common.env
+      - env/quant-data-engine.env
+    volumes:
+      - ./logs/quant-data-engine:/app/logs
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   backtest-worker:
-    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/backtest-worker:latest
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/backtest-worker:${BACKTEST_WORKER_IMAGE_TAG:-latest}
     container_name: backtest-worker
     restart: unless-stopped
     env_file: .env
@@ -84,7 +109,7 @@ services:
       - quant-net
 
   quant-analyzer:
-    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-analyzer:latest
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-analyzer:${QUANT_ANALYZER_IMAGE_TAG:-latest}
     container_name: quant-analyzer
     restart: unless-stopped
     env_file: .env
@@ -92,7 +117,7 @@ services:
       - quant-net
 
   quant-strategy-manager:
-    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-strategy-manager:latest
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-strategy-manager:${QUANT_STRATEGY_MANAGER_IMAGE_TAG:-latest}
     container_name: quant-strategy-manager
     restart: unless-stopped
     env_file: .env

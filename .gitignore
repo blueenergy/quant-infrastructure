@@ -3,6 +3,9 @@
 
 # Environment
 .env
+# Per-service runtime env files (secrets). Examples (*.env.example) stay tracked,
+# and apps/versions.env (image tags) is intentionally NOT ignored.
+apps/env/*.env
 
 # IDE
 .vscode/
