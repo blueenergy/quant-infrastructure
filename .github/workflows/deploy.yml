@@ -11,10 +11,8 @@ name: Deploy app stack
 # Triggers:
 #   - repository_dispatch (event_type: deploy): sent by app repos after they
 #     bump versions.env. client_payload.services = space/comma separated list.
-#   - workflow_dispatch: manual rollout. `services` input (blank = all).
-#   - push to apps/versions.env|docker-compose.yml|deploy.sh: validate only
-#     (no auto rollout during the migration window, to avoid touching services
-#     still owned by their own repo pipelines).
+#   - workflow_dispatch: manual rollout or validation. `services` input
+#     (blank = validate only / deploy all).
 #
 # Required secrets:
 #   VOLC_SSH_KEY, VOLC_HOST, VOLC_USER, ALIYUN_USER, ALIYUN_TOKEN
@@ -31,12 +29,9 @@ on:
         description: "Services to deploy (space separated, blank = all)"
         required: false
         default: ""
-  push:
-    branches: [main]
-    paths:
-      - apps/versions.env
-      - apps/docker-compose.yml
-      - apps/deploy.sh
+  # NOTE: no push trigger — validate runs as part of every deploy (see the
+  # validate job above). To validate a manual infra edit without deploying,
+  # use workflow_dispatch with a blank services input.
 
 permissions:
   contents: read
