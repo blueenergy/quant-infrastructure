@@ -119,13 +119,28 @@ services:
         max-size: "50m"
         max-file: "3"
 
+  # [MIGRATED] Mirrors CI deploy: add-host for same-host API calls, cache
+  # volume, log rotation, layered env.
   backtest-worker:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/backtest-worker:${BACKTEST_WORKER_IMAGE_TAG:-latest}
     container_name: backtest-worker
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - env/common.env
+      - env/backtest-worker.env
+    environment:
+      TZ: Asia/Shanghai
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - backtest_cache:/app/cache
     networks:
       - quant-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   # [MIGRATED] N replicas controlled by QUANT_ANALYZER_REPLICAS in versions.env
   # (default 4). deploy.sh reads that variable and passes --scale automatically,
@@ -166,9 +181,10 @@ services:
 
 volumes:
   # Shared between quant-scorer and quant-api (portfolio research reports).
-  # quant-api mounts this once it is migrated; until then it uses its own
-  # host path — use the same named volume on migration to avoid data split.
   portfolio_research:
+    driver: local
+  # backtest-worker job cache (strategy code, data frames, etc.)
+  backtest_cache:
     driver: local
 
 networks:
