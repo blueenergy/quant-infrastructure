@@ -6,17 +6,28 @@ cd "$SCRIPT_DIR/.."   # apps/
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S %z')] [quant-api-pre] $*"; }
 
-COMPOSE=(docker compose --env-file versions.env)
+ACR_REGISTRY="${ACR_REGISTRY:-crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com}"
+QUANT_API_IMAGE_TAG="$(grep '^QUANT_API_IMAGE_TAG=' versions.env | cut -d= -f2-)"
+IMAGE="${ACR_REGISTRY}/wukongquant/quant-api:${QUANT_API_IMAGE_TAG:-latest}"
 
 run_index_tool() {
   local timeout_seconds="$1"
   shift
 
-  timeout "$timeout_seconds" "${COMPOSE[@]}" run --rm --no-deps quant-api "$@"
+  timeout "$timeout_seconds" docker run --rm \
+    --network quant-network \
+    --add-host=host.docker.internal:host-gateway \
+    --env-file env/quant-api.env \
+    -e TZ=Asia/Shanghai \
+    "$IMAGE" \
+    "$@"
 }
 
-log "Pulling quant-api image for pre-deploy maintenance"
-"${COMPOSE[@]}" pull quant-api
+log "Ensuring shared Docker network"
+docker network inspect quant-network >/dev/null 2>&1 || docker network create quant-network
+
+log "Pulling quant-api image for pre-deploy maintenance: $IMAGE"
+timeout 300 docker pull "$IMAGE"
 
 log "Ensuring portfolio plan MongoDB indexes"
 run_index_tool 120 python tools/check_portfolio_plan_indexes.py --apply \
