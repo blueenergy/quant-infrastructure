@@ -1,64 +1,141 @@
 # ============================================================================
-# Application stack — being migrated to centralized CD (see apps/README.md).
+# Application stack — centralized CD (see apps/README.md).
 #
-# SOURCE OF TRUTH during migration: each repo's GitHub CI deploy job (the real
-# `docker run` on the production host). Services marked [MIGRATED] below have
-# been reconciled to that behavior and are deployed FROM HERE via deploy.sh.
-# UNVERIFIED services are aspirational placeholders kept for tag parameterization
-# only — do NOT deploy them from here until reconciled against their CI deploy.
+# All services below are [MIGRATED]: reconciled to mirror each repo's previous
+# GitHub CI `docker run` and deployed FROM HERE via deploy.sh. Image tags come
+# from versions.env; runtime config/secrets come from per-service env/<svc>.env.
+# If a future [UNVERIFIED] placeholder is added, do NOT deploy it from here
+# until it is reconciled against that service's real deploy.
 # ============================================================================
 services:
-  # [UNVERIFIED] not reconciled against CI deploy yet.
-  # NOTE: quant-api / quant-mcp / quant-mcp-actions / quant-scheduler all share
-  # the same quant-api image, so they share ${QUANT_API_IMAGE_TAG}.
+  # [MIGRATED] Mirrors quantFinance CI deploy: quant-network, API port 3001,
+  # extra_hosts, logs volume, portfolio-research shared volume, log rotation,
+  # and env/quant-api.env injected as process environment (the image excludes
+  # .env, so no /app/.env bind mount is needed).
+  # NOTE: quant-api / quant-mcp-read / quant-mcp-actions / quant-scheduler all
+  # share the same quant-api image, so they share ${QUANT_API_IMAGE_TAG}.
   quant-api:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:${QUANT_API_IMAGE_TAG:-latest}
     container_name: quant-api
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - env/quant-api.env
+    environment:
+      TZ: Asia/Shanghai
+      ENABLE_EMBEDDED_SCHEDULER: "false"
+      ENABLE_MCP_SERVER: "false"
+      API_WORKERS: "2"
+      PORTFOLIO_RESEARCH_REPORT_DIR: /app/reports/portfolio-research
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "3001:3001"
+    volumes:
+      - ./logs/quant-api:/app/logs
+      - portfolio_research:/app/reports/portfolio-research
     networks:
       - quant-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
-  quant-mcp:
+  # [MIGRATED] Optional MCP read server. It remains behind the "mcp" profile to
+  # preserve current production default (DEPLOY_MCP=false).
+  quant-mcp-read:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:${QUANT_API_IMAGE_TAG:-latest}
     container_name: quant-mcp-read
-    command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3002", "--workers", "1", "--log-level", "info" ]
     restart: unless-stopped
-    env_file: .env
+    profiles: ["mcp"]
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3002", "--workers", "1", "--log-level", "info"]
+    env_file:
+      - env/quant-api.env
     environment:
-      - ENABLE_EMBEDDED_SCHEDULER=false
-      - ENABLE_MCP_SERVER=true
-      - MCP_SERVER_MODE=read
+      TZ: Asia/Shanghai
+      ENABLE_EMBEDDED_SCHEDULER: "false"
+      ENABLE_MCP_SERVER: "true"
+      MCP_SERVER_MODE: read
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "3002:3002"
+    volumes:
+      - ./logs/quant-api:/app/logs
     networks:
       - quant-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3002/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
+  # [MIGRATED] Optional MCP actions server. It remains behind the "mcp" profile
+  # to preserve current production default (DEPLOY_MCP=false).
   quant-mcp-actions:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:${QUANT_API_IMAGE_TAG:-latest}
     container_name: quant-mcp-actions
-    command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3003", "--workers", "1", "--log-level", "info" ]
     restart: unless-stopped
-    env_file: .env
+    profiles: ["mcp"]
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3003", "--workers", "1", "--log-level", "info"]
+    env_file:
+      - env/quant-api.env
     environment:
-      - ENABLE_EMBEDDED_SCHEDULER=false
-      - ENABLE_MCP_SERVER=true
-      - MCP_SERVER_MODE=actions
+      TZ: Asia/Shanghai
+      ENABLE_EMBEDDED_SCHEDULER: "false"
+      ENABLE_MCP_SERVER: "true"
+      MCP_SERVER_MODE: actions
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "3003:3003"
+    volumes:
+      - ./logs/quant-api:/app/logs
     networks:
       - quant-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3003/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
+  # [MIGRATED] Mirrors quantFinance CI scheduler container. It is deployed
+  # together with quant-api in v1; MCP remains opt-in through the "mcp" profile.
   quant-scheduler:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:${QUANT_API_IMAGE_TAG:-latest}
     container_name: quant-scheduler
-    command: [ "python", "scheduler_runner.py" ]
     restart: unless-stopped
-    env_file: .env
+    command: ["python", "scheduler_runner.py"]
+    env_file:
+      - env/quant-api.env
+    environment:
+      TZ: Asia/Shanghai
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./logs/quant-api:/app/logs
     networks:
       - quant-net
+    healthcheck:
+      test: ["CMD-SHELL", "python tools/check_scheduler_health.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   # [MIGRATED] Mirrors CI deploy: quant-network, HTTP/HTTPS ports, TLS cert
   # mount, and Nginx upstream env vars moved into env/quant-web.env.

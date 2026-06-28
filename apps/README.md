@@ -106,7 +106,7 @@ Pilot: **quant-data-engine** (done in CI; verify before migrating the rest).
 | Service | Image tag var | Migrated to central CD |
 |---|---|---|
 | quant-data-engine | `QUANT_DATA_ENGINE_IMAGE_TAG` | ✅ pilot |
-| quant-api / mcp / scheduler | `QUANT_API_IMAGE_TAG` | ⬜ (needs index-migration hooks, MCP toggle, volumes) |
+| quant-api / mcp / scheduler | `QUANT_API_IMAGE_TAG` | ✅ |
 | quant-web | `QUANT_DASHBOARD_IMAGE_TAG` | ✅ |
 | quant-scorer | `QUANT_SCORER_IMAGE_TAG` | ✅ |
 | backtest-worker | `BACKTEST_WORKER_IMAGE_TAG` | ✅ |
