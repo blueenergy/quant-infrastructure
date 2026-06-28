@@ -107,11 +107,11 @@ Pilot: **quant-data-engine** (done in CI; verify before migrating the rest).
 |---|---|---|
 | quant-data-engine | `QUANT_DATA_ENGINE_IMAGE_TAG` | ✅ pilot |
 | quant-api / mcp / scheduler | `QUANT_API_IMAGE_TAG` | ⬜ (needs index-migration hooks, MCP toggle, volumes) |
-| quant-web | `QUANT_DASHBOARD_IMAGE_TAG` | ⬜ |
-| quant-scorer | `QUANT_SCORER_IMAGE_TAG` | ⬜ |
-| backtest-worker | `BACKTEST_WORKER_IMAGE_TAG` | ⬜ |
-| quant-analyzer | `QUANT_ANALYZER_IMAGE_TAG` | ⬜ |
-| quant-strategy-manager | `QUANT_STRATEGY_MANAGER_IMAGE_TAG` | ⬜ (multi-arch manifest, shares quantFinance/.env) |
+| quant-web | `QUANT_DASHBOARD_IMAGE_TAG` | ✅ |
+| quant-scorer | `QUANT_SCORER_IMAGE_TAG` | ✅ |
+| backtest-worker | `BACKTEST_WORKER_IMAGE_TAG` | ✅ |
+| quant-analyzer | `QUANT_ANALYZER_IMAGE_TAG` | ✅ |
+| quant-strategy-manager | `QUANT_STRATEGY_MANAGER_IMAGE_TAG` | ✅ |
 
 To migrate a repo:
 1. Make its service in `docker-compose.yml` **faithful** to the current CI
