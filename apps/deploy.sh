@@ -77,11 +77,26 @@ main() {
     up_flags+=(--wait)
   fi
 
+  # Build --scale flags from *_REPLICAS entries in versions.env.
+  # e.g. QUANT_ANALYZER_REPLICAS=4  →  --scale quant-analyzer=4
+  # This lets replica counts be controlled by a single line in versions.env
+  # without touching docker-compose.yml or CI workflows.
+  mapfile -t SCALE_FLAGS < <(
+    grep -E '^[A-Z_]+_REPLICAS=[0-9]+' versions.env 2>/dev/null \
+    | while IFS='=' read -r key val; do
+        svc="${key%_REPLICAS}"          # strip _REPLICAS suffix
+        svc="${svc,,}"                  # QUANT_ANALYZER → quant_analyzer
+        svc="${svc//_/-}"              # quant_analyzer → quant-analyzer
+        echo "--scale=${svc}=${val}"
+      done
+  )
+  [ "${#SCALE_FLAGS[@]}" -gt 0 ] && log "Scale flags: ${SCALE_FLAGS[*]}"
+
   if [ "${#SERVICES[@]}" -eq 0 ]; then
     log "Pulling all service images"
     "${COMPOSE[@]}" pull
     log "Bringing up all services"
-    "${COMPOSE[@]}" up "${up_flags[@]}"
+    "${COMPOSE[@]}" up "${up_flags[@]}" "${SCALE_FLAGS[@]}"
   else
     log "Target services: ${SERVICES[*]}"
     for svc in "${SERVICES[@]}"; do
@@ -91,7 +106,8 @@ main() {
     "${COMPOSE[@]}" pull "${SERVICES[@]}"
     log "Bringing up: ${SERVICES[*]}"
     # --no-deps so we never restart unrelated dependencies during a targeted roll.
-    "${COMPOSE[@]}" up "${up_flags[@]}" --no-deps "${SERVICES[@]}"
+    # Scale flags are always passed; compose ignores them for services not listed.
+    "${COMPOSE[@]}" up "${up_flags[@]}" --no-deps "${SCALE_FLAGS[@]}" "${SERVICES[@]}"
     for svc in "${SERVICES[@]}"; do
       run_hook post "$svc"
     done
