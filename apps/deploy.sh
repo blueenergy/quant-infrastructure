@@ -77,27 +77,39 @@ main() {
     up_flags+=(--wait)
   fi
 
-  # Build --scale flags from *_REPLICAS entries in versions.env.
+  # Build --scale flags from *_REPLICAS entries in versions.env, filtered to
+  # only the services being deployed. Passing --scale for a service not in the
+  # target list causes compose to error, so we scope flags to the target set
+  # (empty target = all services = include every scale flag).
   # e.g. QUANT_ANALYZER_REPLICAS=4  →  --scale quant-analyzer=4
-  # This lets replica counts be controlled by a single line in versions.env
-  # without touching docker-compose.yml or CI workflows.
-  mapfile -t SCALE_FLAGS < <(
+  build_scale_flags() {
+    local -a targets=("$@")   # empty = deploy all → include all scale flags
     grep -E '^[A-Z_]+_REPLICAS=[0-9]+' versions.env 2>/dev/null \
     | while IFS='=' read -r key val; do
-        svc="${key%_REPLICAS}"          # strip _REPLICAS suffix
-        svc="${svc,,}"                  # QUANT_ANALYZER → quant_analyzer
-        svc="${svc//_/-}"              # quant_analyzer → quant-analyzer
-        echo "--scale=${svc}=${val}"
+        local svc="${key%_REPLICAS}"
+        svc="${svc,,}"
+        svc="${svc//_/-}"
+        # Include if deploying all, or if this service is explicitly targeted.
+        if [ "${#targets[@]}" -eq 0 ]; then
+          echo "--scale=${svc}=${val}"
+        else
+          for t in "${targets[@]}"; do
+            [ "$t" = "$svc" ] && echo "--scale=${svc}=${val}" && break
+          done
+        fi
       done
-  )
-  [ "${#SCALE_FLAGS[@]}" -gt 0 ] && log "Scale flags: ${SCALE_FLAGS[*]}"
+  }
 
   if [ "${#SERVICES[@]}" -eq 0 ]; then
+    mapfile -t SCALE_FLAGS < <(build_scale_flags)
+    [ "${#SCALE_FLAGS[@]}" -gt 0 ] && log "Scale flags: ${SCALE_FLAGS[*]}"
     log "Pulling all service images"
     "${COMPOSE[@]}" pull
     log "Bringing up all services"
     "${COMPOSE[@]}" up "${up_flags[@]}" "${SCALE_FLAGS[@]}"
   else
+    mapfile -t SCALE_FLAGS < <(build_scale_flags "${SERVICES[@]}")
+    [ "${#SCALE_FLAGS[@]}" -gt 0 ] && log "Scale flags: ${SCALE_FLAGS[*]}"
     log "Target services: ${SERVICES[*]}"
     for svc in "${SERVICES[@]}"; do
       run_hook pre "$svc"
@@ -105,8 +117,7 @@ main() {
     log "Pulling images for: ${SERVICES[*]}"
     "${COMPOSE[@]}" pull "${SERVICES[@]}"
     log "Bringing up: ${SERVICES[*]}"
-    # --no-deps so we never restart unrelated dependencies during a targeted roll.
-    # Scale flags are always passed; compose ignores them for services not listed.
+    # --no-deps so we never restart unrelated services during a targeted roll.
     "${COMPOSE[@]}" up "${up_flags[@]}" --no-deps "${SCALE_FLAGS[@]}" "${SERVICES[@]}"
     for svc in "${SERVICES[@]}"; do
       run_hook post "$svc"
