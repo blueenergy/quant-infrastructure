@@ -24,7 +24,7 @@ services:
       TZ: Asia/Shanghai
       ENABLE_EMBEDDED_SCHEDULER: "false"
       ENABLE_MCP_SERVER: "false"
-      API_WORKERS: "2"
+      API_WORKERS: "${API_WORKERS:-2}"
       PORTFOLIO_RESEARCH_REPORT_DIR: /app/reports/portfolio-research
     extra_hosts:
       - "host.docker.internal:host-gateway"
