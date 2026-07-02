@@ -24,7 +24,10 @@ services:
       TZ: Asia/Shanghai
       ENABLE_EMBEDDED_SCHEDULER: "false"
       ENABLE_MCP_SERVER: "false"
-      API_WORKERS: "${API_WORKERS:-2}"
+      # API_WORKERS is intentionally NOT set here: an environment: entry would
+      # override env_file and, since it can only interpolate from versions.env
+      # (deploy.sh passes only --env-file versions.env), always resolve to the
+      # default. Configure API_WORKERS in env/quant-api.env instead.
       PORTFOLIO_RESEARCH_REPORT_DIR: /app/reports/portfolio-research
     extra_hosts:
       - "host.docker.internal:host-gateway"
