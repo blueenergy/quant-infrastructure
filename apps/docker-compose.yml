@@ -161,14 +161,41 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  # [MIGRATED] Mirrors CI deploy: add-host for same-host quant-api calls,
-  # logs volume, shared portfolio-research volume. Post-deploy DB maintenance
-  # runs via apps/hooks/quant-scorer-post.sh (ensure_portfolio_indexes +
+  # [MIGRATED] Scoring-only role from the stock-scoring-system image. It keeps
+  # daily stock scoring and manual backfills separate from portfolio research
+  # and plan generation. Post-deploy DB maintenance still runs once via
+  # apps/hooks/quant-scorer-post.sh (ensure_portfolio_indexes +
   # seed_portfolio_param_presets).
   quant-scorer:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer:${QUANT_SCORER_IMAGE_TAG:-latest}
     container_name: quant-scorer
     restart: unless-stopped
+    command: ["/app/start.scorer.sh"]
+    env_file:
+      - env/common.env
+      - env/quant-scorer.env
+    environment:
+      - TZ=Asia/Shanghai
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./logs/quant-scorer:/app/logs
+    networks:
+      - quant-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # [MIGRATED] Portfolio research role from the stock-scoring-system image.
+  # It consumes research jobs and writes reports to the shared volume read by
+  # quant-api.
+  quant-researcher:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer:${QUANT_SCORER_IMAGE_TAG:-latest}
+    container_name: quant-researcher
+    restart: unless-stopped
+    command: ["/app/start.researcher.sh"]
     env_file:
       - env/common.env
       - env/quant-scorer.env
@@ -178,8 +205,33 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./logs/quant-scorer:/app/logs
+      - ./logs/quant-researcher:/app/logs
       - portfolio_research:/app/reports/portfolio-research
+    networks:
+      - quant-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # [MIGRATED] Portfolio planning and paper-trading role from the
+  # stock-scoring-system image. It owns plan-generation polling and paper
+  # execution/mark-to-market cron jobs.
+  quant-portfolio:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer:${QUANT_SCORER_IMAGE_TAG:-latest}
+    container_name: quant-portfolio
+    restart: unless-stopped
+    command: ["/app/start.portfolio.sh"]
+    env_file:
+      - env/common.env
+      - env/quant-scorer.env
+    environment:
+      - TZ=Asia/Shanghai
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./logs/quant-portfolio:/app/logs
     networks:
       - quant-net
     logging:
@@ -287,7 +339,7 @@ services:
         max-file: "3"
 
 volumes:
-  # Shared between quant-scorer and quant-api (portfolio research reports).
+  # Shared between quant-researcher and quant-api (portfolio research reports).
   portfolio_research:
     driver: local
   # backtest-worker job cache (strategy code, data frames, etc.)

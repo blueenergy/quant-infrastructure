@@ -109,9 +109,15 @@ Pilot: **quant-data-engine** (done in CI; verify before migrating the rest).
 | quant-api / mcp / scheduler | `QUANT_API_IMAGE_TAG` | ✅ |
 | quant-web | `QUANT_DASHBOARD_IMAGE_TAG` | ✅ |
 | quant-scorer | `QUANT_SCORER_IMAGE_TAG` | ✅ |
+| quant-researcher | `QUANT_SCORER_IMAGE_TAG` | ✅ |
+| quant-portfolio | `QUANT_SCORER_IMAGE_TAG` | ✅ |
 | backtest-worker | `BACKTEST_WORKER_IMAGE_TAG` | ✅ |
 | quant-analyzer | `QUANT_ANALYZER_IMAGE_TAG` | ✅ |
 | quant-strategy-manager | `QUANT_STRATEGY_MANAGER_IMAGE_TAG` | ✅ |
+
+`quant-scorer`、`quant-researcher`、`quant-portfolio` 共享同一个
+`stock-scoring-system` 镜像 tag，通过不同 `command` 分别运行评分、组合研究、
+组合计划/paper-trading 入口。
 
 To migrate a repo:
 1. Make its service in `docker-compose.yml` **faithful** to the current CI
