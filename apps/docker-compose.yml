@@ -247,6 +247,7 @@ services:
     command: ["/app/start.portfolio.sh"]
     env_file:
       - env/common.env
+      # Includes TUSHARE_TOKEN; plan generation needs trade_cal for future execute_date.
       - env/quant-scorer.env
     environment:
       - TZ=Asia/Shanghai
