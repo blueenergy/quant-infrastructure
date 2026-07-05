@@ -182,13 +182,14 @@ services:
       - ./logs/quant-scorer:/app/logs
     networks:
       - quant-net
-    # Scoring uses up to MAX_WORKERS=6 threads; 6 CPUs ensures it is never
-    # starved by researcher sweeps running concurrently on the same host.
+    # Resource limits are tunable per environment via common.env:
+    #   SCORER_CPU_LIMIT, SCORER_MEM_LIMIT
+    # Defaults assume a 4-core host; raise for larger machines.
     deploy:
       resources:
         limits:
-          cpus: "6"
-          memory: 4g
+          cpus: "${SCORER_CPU_LIMIT:-4}"
+          memory: "${SCORER_MEM_LIMIT:-4g}"
         reservations:
           cpus: "1"
           memory: 512m
@@ -219,13 +220,14 @@ services:
       - portfolio_research:/app/reports/portfolio-research
     networks:
       - quant-net
-    # Sweep jobs are CPU-intensive but exploratory; cap at 4 CPUs so scorer
-    # always has headroom even when a heavy sweep is in flight.
+    # Resource limits are tunable per environment via common.env:
+    #   RESEARCHER_CPU_LIMIT, RESEARCHER_MEM_LIMIT
+    # Default caps sweep at half the host cores so scorer keeps headroom.
     deploy:
       resources:
         limits:
-          cpus: "4"
-          memory: 6g
+          cpus: "${RESEARCHER_CPU_LIMIT:-2}"
+          memory: "${RESEARCHER_MEM_LIMIT:-6g}"
         reservations:
           cpus: "0"
           memory: 256m
@@ -254,13 +256,14 @@ services:
       - ./logs/quant-portfolio:/app/logs
     networks:
       - quant-net
-    # Plan generation loop and paper cron jobs are lightweight;
-    # 1 CPU and 512 MiB are more than sufficient.
+    # Resource limits are tunable per environment via common.env:
+    #   PORTFOLIO_CPU_LIMIT, PORTFOLIO_MEM_LIMIT
+    # Plan generation loop and paper cron jobs are lightweight.
     deploy:
       resources:
         limits:
-          cpus: "1"
-          memory: 512m
+          cpus: "${PORTFOLIO_CPU_LIMIT:-1}"
+          memory: "${PORTFOLIO_MEM_LIMIT:-512m}"
         reservations:
           cpus: "0"
           memory: 128m
