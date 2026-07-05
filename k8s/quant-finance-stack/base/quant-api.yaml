@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quant-api
+  namespace: quant-finance
+  labels:
+    app: quant-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quant-api
+  template:
+    metadata:
+      labels:
+        app: quant-api
+    spec:
+      containers:
+        - name: api
+          image: quant-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3001
+              name: http
+          envFrom:
+            - configMapRef:
+                name: quant-config
+            - secretRef:
+                name: quant-secrets
+          readinessProbe:
+            tcpSocket:
+              port: 3001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quant-api
+  namespace: quant-finance
+spec:
+  selector:
+    app: quant-api
+  ports:
+    - name: http
+      port: 3001
+      targetPort: 3001

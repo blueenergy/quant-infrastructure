@@ -1,0 +1,55 @@
+# K8s-oriented nginx: upstream points at Service quant-api (replaces docker-compose host "api").
+# HTTP only on port 80; add TLS via Traefik / cert-manager Ingress in production.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quant-web-nginx
+  namespace: quant-finance
+data:
+  nginx.conf: |
+    events { worker_connections 1024; }
+    http {
+      include       /etc/nginx/mime.types;
+      default_type  application/octet-stream;
+      sendfile on;
+      keepalive_timeout 65;
+      client_max_body_size 10M;
+      gzip on;
+      gzip_types text/plain text/css application/json application/javascript text/xml;
+
+      upstream api_backend {
+        server quant-api.quant-finance.svc.cluster.local:3001;
+        keepalive 32;
+      }
+
+      server {
+        listen 80;
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
+
+        location / {
+          try_files $uri $uri/ /index.html;
+        }
+
+        location /api/ {
+          proxy_pass http://api_backend;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+          proxy_http_version 1.1;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection "upgrade";
+          proxy_connect_timeout 60s;
+          proxy_send_timeout 60s;
+          proxy_read_timeout 60s;
+        }
+
+        location /health {
+          access_log off;
+          return 200 "healthy\n";
+          add_header Content-Type text/plain;
+        }
+      }
+    }

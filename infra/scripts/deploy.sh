@@ -3,6 +3,9 @@
 
 set -e
 
+# 始终在 infra/（compose 与 .env 所在目录）下操作，无论从哪里调用。
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🚀 Deploying Quant Trading Infrastructure"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

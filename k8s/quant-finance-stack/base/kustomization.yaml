@@ -1,0 +1,52 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: quant-finance
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - configmap-web-nginx.yaml
+  - quant-api.yaml
+  - quant-strategy-manager.yaml
+  - quant-assistant.yaml
+  - quant-analyzer.yaml
+  - quant-data-engine.yaml
+  - backtest-worker.yaml
+  - quant-scorer.yaml
+  - web.yaml
+  # Uncomment when DNS / TLS ready:
+  # - ingress-web.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: quant-finance
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: true
+
+# Replace with your registry after building images (see README).
+images:
+  - name: quant-api
+    newName: localhost:5000/quant-api
+    newTag: latest
+  - name: quant-strategy-manager
+    newName: localhost:5000/quant-strategy-manager
+    newTag: latest
+  - name: quant-assistant
+    newName: localhost:5000/quant-assistant
+    newTag: latest
+  - name: quant-analyzer
+    newName: localhost:5000/quant-analyzer
+    newTag: latest
+  - name: quant-data-engine
+    newName: localhost:5000/quant-data-engine
+    newTag: latest
+  - name: backtest-worker
+    newName: localhost:5000/backtest-worker
+    newTag: v2
+  - name: quant-scorer
+    newName: localhost:5000/quant-scorer
+    newTag: latest
+  - name: quant-web
+    newName: localhost:5000/quant-web
+    newTag: latest

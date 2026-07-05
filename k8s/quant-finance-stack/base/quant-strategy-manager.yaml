@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quant-strategy-manager
+  namespace: quant-finance
+  labels:
+    app: quant-strategy-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quant-strategy-manager
+  template:
+    metadata:
+      labels:
+        app: quant-strategy-manager
+    spec:
+      containers:
+        - name: manager
+          image: quant-strategy-manager:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: quant-config
+            - secretRef:
+                name: quant-secrets
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quant-strategy-manager
+  namespace: quant-finance
+spec:
+  selector:
+    app: quant-strategy-manager
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000

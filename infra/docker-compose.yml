@@ -1,3 +1,8 @@
+# 迁入 infra/ 后，Compose 默认项目名会由目录名变成 "infra"，导致命名卷
+# 从 quant-infrastructure_* 变成 infra_*（等于换了空卷，看似丢数据）。
+# 用 name: 显式钉死项目名，卷名与迁移前保持一致。
+name: quant-infrastructure
+
 services:
   # ========================
   # MongoDB 数据库

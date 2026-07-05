@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quant-assistant
+  namespace: quant-finance
+  labels:
+    app: quant-assistant
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quant-assistant
+  template:
+    metadata:
+      labels:
+        app: quant-assistant
+    spec:
+      containers:
+        - name: assistant
+          image: quant-assistant:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8002
+              name: http
+          envFrom:
+            - configMapRef:
+                name: quant-config
+            - secretRef:
+                name: quant-secrets
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: QWEN_API_KEY
+            - name: OPENAI_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: quant-config
+                  key: QWEN_BASE_URL
+            - name: OPENAI_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: quant-config
+                  key: DEFAULT_MODEL
+            - name: EMBEDDINGS_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: quant-config
+                  key: QWEN_BASE_URL
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MONGO_URI
+            - name: MONGO_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: quant-config
+                  key: MONGO_DB_ASSISTANT
+            - name: INTERNAL_API_BASE
+              valueFrom:
+                configMapKeyRef:
+                  name: quant-config
+                  key: INTERNAL_API_BASE
+            - name: TUSHARE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: TUSHARE_TOKEN
+                  optional: true
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quant-assistant
+  namespace: quant-finance
+spec:
+  selector:
+    app: quant-assistant
+  ports:
+    - name: http
+      port: 8002
+      targetPort: 8002

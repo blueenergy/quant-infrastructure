@@ -1,0 +1,22 @@
+# Optional: K3s ships Traefik. Set host to your domain and apply after quant-web is ready.
+# kubectl apply -f ingress-web.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: quant-web
+  namespace: quant-finance
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: quant-dashboard.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: quant-web
+                port:
+                  number: 80

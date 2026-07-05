@@ -1,0 +1,2 @@
+# 占位文件：保留空目录以便 docker-compose 挂载 ./grafana/dashboards。
+# Grafana 面板 provisioning 待补充（监控栈仍为 DRAFT，未真正启用）。

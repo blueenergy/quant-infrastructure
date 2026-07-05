@@ -333,7 +333,7 @@ cat > "${USER_HOME}/start-services.sh" << 'EOF'
 # 启动所有服务
 
 echo "启动基础设施服务..."
-cd ~/trading/quant-infrastructure
+cd ~/trading/quant-infrastructure/infra
 docker compose up -d mongodb redis
 
 echo ""
@@ -405,7 +405,7 @@ echo "     source .venv/bin/activate"
 echo "     pip install -r requirements.txt"
 echo ""
 echo "  4. 启动基础设施 (MongoDB, Redis):"
-echo "     cd ~/trading/quant-infrastructure"
+echo "     cd ~/trading/quant-infrastructure/infra"
 echo "     docker compose up -d"
 echo ""
 echo "  5. 部署 systemd 服务:"

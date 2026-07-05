@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quant-data-engine
+  namespace: quant-finance
+  labels:
+    app: quant-data-engine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quant-data-engine
+  template:
+    metadata:
+      labels:
+        app: quant-data-engine
+    spec:
+      containers:
+        - name: engine
+          image: quant-data-engine:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: quant-config
+            - secretRef:
+                name: quant-secrets
+          env:
+            - name: MONGO_DB
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MONGO_DB
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MONGO_DB
+            - name: SECONDARY_MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: SECONDARY_MONGO_URI
+                  optional: true
+            - name: SECONDARY_MONGO_DB
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: SECONDARY_MONGO_DB
+                  optional: true
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+      volumes:
+        - name: logs
+          emptyDir: {}

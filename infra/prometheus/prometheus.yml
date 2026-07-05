@@ -1,0 +1,10 @@
+# ⚠️ DRAFT — 监控栈尚未在生产真正启用。
+# Prometheus/Grafana 归在 docker-compose 的 `monitoring` profile 下，
+# 默认 `docker compose up -d` 不会启动；此配置仅为占位骨架，抓取目标待完善。
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

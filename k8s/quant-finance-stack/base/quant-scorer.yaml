@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quant-scorer
+  namespace: quant-finance
+  labels:
+    app: quant-scorer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quant-scorer
+  template:
+    metadata:
+      labels:
+        app: quant-scorer
+    spec:
+      containers:
+        - name: scorer
+          image: quant-scorer:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: quant-config
+            - secretRef:
+                name: quant-secrets
+          env:
+            - name: MONGO_URL
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MONGO_URI
+            - name: MONGO_DB
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MONGO_DB
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+      volumes:
+        - name: logs
+          emptyDir: {}

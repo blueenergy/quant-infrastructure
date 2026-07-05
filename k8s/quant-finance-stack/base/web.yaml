@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quant-web
+  namespace: quant-finance
+  labels:
+    app: quant-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quant-web
+  template:
+    metadata:
+      labels:
+        app: quant-web
+    spec:
+      containers:
+        - name: nginx
+          image: quant-web:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              name: http
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: quant-web-nginx
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quant-web
+  namespace: quant-finance
+spec:
+  selector:
+    app: quant-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80

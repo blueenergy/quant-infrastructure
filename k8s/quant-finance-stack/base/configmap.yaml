@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quant-config
+  namespace: quant-finance
+data:
+  TZ: "Asia/Shanghai"
+  ANALYZER_DB_NAME: "quant_analyzer"
+  DATA_DB_NAME: "quant_data"
+  # In-cluster service DNS (same as docker-compose service names)
+  REMOTE_WORKER_API: "http://quant-strategy-manager:5000/api/workers"
+  INTERNAL_API_BASE: "http://quant-api:3001"
+  DEFAULT_LLM_PROVIDER: "qwen"
+  DEFAULT_MODEL: "qwen-plus"
+  ANALYSIS_INTERVAL: "300"
+  DISABLE_AUTO_ANALYSIS: "false"
+  RATE_LIMIT_PER_SEC: "20"
+  DEPLOY_MODE: "full"
+  ASSISTANT_HOST: "0.0.0.0"
+  ASSISTANT_PORT: "8002"
+  RELOAD: "false"
+  API_PORT: "5000"
+  POLL_INTERVAL: "5"
+  LOG_LEVEL: "INFO"
+  ENABLE_SCREENING: "true"
+  SCREENING_MODE: "conservative"
+  MAX_WORKERS: "6"
+  EMBEDDINGS_MODEL: "text-embedding-v3"
+  EMBEDDINGS_DIMENSIONS: "1024"
+  MONGO_DB_ASSISTANT: "assistant"
+  QWEN_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1"

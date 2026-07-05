@@ -2,17 +2,28 @@
 
 完整的量化交易基础设施部署方案，包含 MongoDB、Redis、监控系统。
 
+## 🗂️ 仓库布局
+
+本仓库分为两个对等的栈，各自带 `docker-compose.yml`：
+
+- **`infra/`** — 基础设施栈（MongoDB / Redis / Prometheus / Grafana / Hermes /
+  Portainer）。**基础设施相关的 `docker compose` 命令都在 `infra/` 目录下执行。**
+- **`apps/`** — 业务应用栈（API / Analyzer / 前端等），由 `apps/versions.env` 与 CI 驱动。
+
+> ⚠️ Compose 项目名通过 `infra/docker-compose.yml` 里的 `name: quant-infrastructure`
+> 显式钉死，命名卷仍为 `quant-infrastructure_*`，不会因目录调整而丢数据。
+
 ## 📋 组件
 
 - **MongoDB 7.0**: 主数据库，存储历史数据、交易信号、持仓等
 - **Redis 7**: 内存数据库，用于实时 tick 数据缓存和 Pub/Sub
-- **Prometheus** (可选): 监控系统
-- **Grafana** (可选): 可视化面板
+- **Prometheus** (草稿，未真正启用): 监控系统，归于 `monitoring` profile
+- **Grafana** (草稿，未真正启用): 可视化面板，归于 `monitoring` profile
 - **Portainer** (可选): 单机 Docker 容器管理面板
 
 ### Kubernetes / K3s（应用栈）
 
-业务服务（API、Analyzer、前端等）的 Kustomize 清单见 **[k8s/quant-finance-stack/README.md](./k8s/quant-finance-stack/README.md)**，可与本仓库 Docker Compose 基础设施并行使用（Mongo/Redis 仍可用 Compose 部署在集群外或单独命名空间）。
+业务服务（API、Analyzer、前端等）的 Kustomize 清单见 **[k8s/quant-finance-stack/README.md](./k8s/quant-finance-stack/README.md)**（⚠️ **草稿，尚未真正启用**）。生产目前使用 `infra/` + `apps/` 两套 Docker Compose；k8s 清单仅供后续迁移参考。
 
 ## 🚀 快速开始
 
@@ -27,7 +38,7 @@ curl -O https://raw.githubusercontent.com/.../setup-server.sh
 cd quant-infrastructure
 
 # 以 root 权限运行
-sudo bash scripts/setup-server.sh
+sudo bash infra/scripts/setup-server.sh
 ```
 
 **该脚本会自动：**
@@ -56,6 +67,9 @@ cd quant-infrastructure
 ### 2. 配置环境变量
 
 ```bash
+# 进入基础设施栈目录
+cd infra
+
 # 复制环境变量模板
 cp .env.example .env
 
@@ -66,11 +80,11 @@ vim .env
 ### 3. 部署服务
 
 ```bash
-# 运行部署脚本
+# 在 infra/ 目录下运行部署脚本
 ./scripts/deploy.sh
 
-# 或者手动启动
-docker-compose up -d
+# 或者手动启动（同样在 infra/ 目录下）
+docker compose up -d
 ```
 
 ### 4. 验证部署
@@ -126,6 +140,9 @@ redis-cli -h localhost -p 6379 ping
 | Portainer | 200MB | - | 0.5核 |
 
 ## 🛠️ 常用命令
+
+> 以下 `docker compose` / `./scripts/*.sh` 命令均在 **`infra/`** 目录下执行
+> （先 `cd infra`）。
 
 ### 启动/停止
 
@@ -210,24 +227,27 @@ docker exec quant-redis redis-cli INFO
 
 ```
 quant-infrastructure/
-├── docker-compose.yml          # 主编排文件
-├── .env.example                # 环境变量模板
-├── .env                        # 环境变量（需自己创建）
-├── mongodb/
-│   ├── mongod.conf            # MongoDB 配置
-│   └── mongo-init.js          # 初始化脚本
-├── redis/
-│   └── redis.conf             # Redis 配置
-├── prometheus/
-│   └── prometheus.yml         # Prometheus 配置
-├── grafana/
-│   ├── dashboards/            # Grafana 面板
-│   └── datasources/           # 数据源配置
-└── scripts/
-    ├── deploy.sh              # 部署脚本
-    ├── monitor.sh             # 监控脚本
-    ├── backup.sh              # 备份脚本
-    └── restore.sh             # 恢复脚本
+├── infra/                     # 基础设施栈（与 apps/ 对等）
+│   ├── docker-compose.yml      # 基础设施编排文件（name: quant-infrastructure）
+│   ├── .env.example            # 环境变量模板
+│   ├── .env                    # 环境变量（需自己创建）
+│   ├── mongodb/
+│   │   ├── mongod.conf         # MongoDB 配置
+│   │   └── mongo-init.js       # 初始化脚本
+│   ├── redis/
+│   │   └── redis.conf          # Redis 配置
+│   ├── prometheus/             # ⚠️ 草稿，未真正启用（monitoring profile）
+│   │   └── prometheus.yml
+│   ├── grafana/                # ⚠️ 草稿，未真正启用（monitoring profile）
+│   │   ├── dashboards/
+│   │   └── datasources/
+│   ├── hermes-data/            # Hermes 运行时数据（容器创建，未纳入 git）
+│   └── scripts/
+│       ├── deploy.sh           # 部署脚本
+│       ├── monitor.sh          # 监控脚本
+│       └── setup-server.sh     # 新服务器初始化脚本
+├── apps/                       # 业务应用栈（API/Analyzer/前端等）
+└── k8s/                        # ⚠️ 草稿，未真正启用（K3s/Kubernetes 清单）
 ```
 
 ## 🔗 业务系统集成
@@ -269,8 +289,8 @@ REDIS_URL=redis://:password@host.docker.internal:6379
 # 查看日志
 docker compose logs mongodb
 
-# 检查配置文件
-cat mongodb/mongod.conf
+# 检查配置文件（在 infra/ 下）
+cat infra/mongodb/mongod.conf
 
 # 检查数据卷权限
 docker volume inspect quant-infrastructure_mongodb7_data

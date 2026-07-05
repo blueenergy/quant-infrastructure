@@ -7,6 +7,9 @@
 # and apps/versions.env (image tags) is intentionally NOT ignored.
 apps/env/*.env
 
+# Hermes runtime data store (created & owned by the hermes container).
+infra/hermes-data/
+
 # IDE
 .vscode/
 .idea/
