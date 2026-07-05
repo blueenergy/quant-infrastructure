@@ -182,6 +182,16 @@ services:
       - ./logs/quant-scorer:/app/logs
     networks:
       - quant-net
+    # Scoring uses up to MAX_WORKERS=6 threads; 6 CPUs ensures it is never
+    # starved by researcher sweeps running concurrently on the same host.
+    deploy:
+      resources:
+        limits:
+          cpus: "6"
+          memory: 4g
+        reservations:
+          cpus: "1"
+          memory: 512m
     logging:
       driver: json-file
       options:
@@ -209,6 +219,16 @@ services:
       - portfolio_research:/app/reports/portfolio-research
     networks:
       - quant-net
+    # Sweep jobs are CPU-intensive but exploratory; cap at 4 CPUs so scorer
+    # always has headroom even when a heavy sweep is in flight.
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 6g
+        reservations:
+          cpus: "0"
+          memory: 256m
     logging:
       driver: json-file
       options:
@@ -234,6 +254,16 @@ services:
       - ./logs/quant-portfolio:/app/logs
     networks:
       - quant-net
+    # Plan generation loop and paper cron jobs are lightweight;
+    # 1 CPU and 512 MiB are more than sufficient.
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512m
+        reservations:
+          cpus: "0"
+          memory: 128m
     logging:
       driver: json-file
       options:
