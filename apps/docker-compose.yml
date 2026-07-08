@@ -10,8 +10,8 @@
 services:
   # [MIGRATED] Mirrors quantFinance CI deploy: quant-network, API port 3001,
   # extra_hosts, logs volume, portfolio-research shared volume, log rotation,
-  # and env/quant-api.env injected as process environment (the image excludes
-  # .env, so no /app/.env bind mount is needed).
+  # and shared env/common.env + service env/quant-api.env injected as process
+  # environment (the image excludes .env, so no /app/.env bind mount is needed).
   # NOTE: quant-api / quant-mcp-read / quant-mcp-actions / quant-scheduler all
   # share the same quant-api image, so they share ${QUANT_API_IMAGE_TAG}.
   quant-api:
@@ -19,6 +19,7 @@ services:
     container_name: quant-api
     restart: unless-stopped
     env_file:
+      - env/common.env
       - env/quant-api.env
     environment:
       TZ: Asia/Shanghai
@@ -53,6 +54,7 @@ services:
     profiles: ["mcp"]
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3002", "--workers", "1", "--log-level", "info"]
     env_file:
+      - env/common.env
       - env/quant-api.env
     environment:
       TZ: Asia/Shanghai
@@ -87,6 +89,7 @@ services:
     profiles: ["mcp"]
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3003", "--workers", "1", "--log-level", "info"]
     env_file:
+      - env/common.env
       - env/quant-api.env
     environment:
       TZ: Asia/Shanghai
@@ -120,6 +123,7 @@ services:
     restart: unless-stopped
     command: ["python", "scheduler_runner.py"]
     env_file:
+      - env/common.env
       - env/quant-api.env
     environment:
       TZ: Asia/Shanghai
