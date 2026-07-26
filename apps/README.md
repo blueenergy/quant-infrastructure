@@ -23,7 +23,7 @@ app repo CI:  test -> build -> push image (sha tag)
 quant-infrastructure (source of truth):
    apps/docker-compose.yml   topology (all services use ${*_IMAGE_TAG})
    apps/versions.env         desired image tags  <-- CI edits this
-   apps/.env                 runtime secrets (NOT committed)
+   apps/env/*.env            production runtime (NOT committed)
                                    |
    .github/workflows/deploy.yml (this repo):
        repository_dispatch / workflow_dispatch
@@ -45,12 +45,15 @@ Key properties:
 
 | File | Committed | Purpose |
 |---|---|---|
-| `docker-compose.yml` | yes | Topology. All images use `${*_IMAGE_TAG:-latest}`. |
+| `docker-compose.yml` | yes | **Production** topology. All images use `${*_IMAGE_TAG:-latest}`. |
+| `docker-compose.dev.yml` | yes | **Local dev** stack (build from sibling repos). |
+| `compose-dev.sh` | yes | Wrapper: `docker-compose.dev.yml` + **`apps/.env`** interpolation (dev). |
 | `versions.env` | yes | Desired image tags (the "values.yaml"). CI edits this. |
-| `env/common.env` | **no** (gitignored) | Runtime config shared by all services. |
-| `env/<svc>.env` | **no** (gitignored) | Per-service runtime config & secrets. |
-| `env/*.env.example` | yes | Templates for the above (copied on the host). |
-| `.env` | **no** (gitignored) | Legacy single env, still used by not-yet-migrated services. |
+| `.env.example` | yes | **Dev-only** template for compose `${VAR}` interpolation; copy to `.env`. |
+| `.env` | **no** (gitignored) | Local dev compose interpolation (`compose-dev.sh` default). |
+| `env/common.env` | **no** (gitignored) | **Production** runtime config shared by all services. |
+| `env/<svc>.env` | **no** (gitignored) | **Production** per-service runtime config & secrets. |
+| `env/*.env.example` | yes | Templates for production `env/*.env` (copied on the host). |
 | `deploy.sh` | yes | CD entrypoint, runs on the prod host. |
 | `hooks/<svc>-{pre,post}.sh` | yes (optional) | Per-service deploy hooks (e.g. quant-api DB index migrations). |
 
@@ -78,7 +81,40 @@ cp env/common.env.example env/common.env
 cp env/quant-data-engine.env.example env/quant-data-engine.env
 ```
 
-Legacy `apps/.env` stays only until the last service migrates.
+## Env files: dev vs production
+
+| File | When | Role |
+|---|---|---|
+| `apps/.env` | **Local dev** (`compose-dev.sh`) | Small shared file: `${VAR}` for Mongo, JWT, TUSHARE, etc. Service-specific keys stay in `<repo>/.env`. |
+| `env/common.env` + `env/<svc>.env` | **Production** | Injected into containers via `env_file` on `docker-compose.yml`. |
+| `<repo>/.env` (e.g. `stock-scoring-system/.env`) | **Local dev** | Service-specific runtime vars via `env_file` in `docker-compose.dev.yml`. Keys also listed under `environment: - KEY=${KEY}` take values from **`apps/.env`**, not the repo file. |
+
+## Local development (full stack)
+
+Use **`docker-compose.dev.yml`** — not `deploy.sh` and not production `docker-compose.yml`.
+
+```bash
+# Infra network + Mongo/Redis (once)
+cd ../infra && docker compose up -d mongodb redis
+
+cd ~/trading/quant-infrastructure/apps
+cp -n .env.example .env   # first time; edit secrets
+./compose-dev.sh config          # render check
+./compose-dev.sh up -d --build quant-api quant-researcher
+./compose-dev.sh --profile frontend up -d quant-web
+```
+
+**Env model (dev only):**
+
+| Layer | Purpose |
+|---|---|
+| `apps/.env` | Compose `${VAR}` interpolation via `compose-dev.sh --env-file` |
+| Each service `env_file` | Runtime config from the owning repo (e.g. `stock-scoring-system/.env` → `PORTFOLIO_RESEARCH_SWEEP_WORKERS`) |
+| `environment:` in compose | Docker-network overrides (`MONGO_URI` from `DOCKER_MONGO_URI`, feature flags) |
+
+Do **not** run dev and production stacks with the same `container_name` on one host (e.g. `quant-api`). Use project `quantfinance-dev` from `compose-dev.sh` only after stopping the old stack, or adjust `container_name` for local experiments.
+
+**Note:** `quant-assistant` is not part of the dev stack (legacy assistant retired). `quant-web` builds with `VITE_ASSISTANT_STREAM_BACKEND=hermes` and routes chat through quant-api.
 
 ## Manual operations (on the production host)
 
