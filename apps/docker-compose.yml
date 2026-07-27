@@ -165,14 +165,15 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  # [MIGRATED] Scoring-only role from the stock-scoring-system image. It keeps
-  # daily stock scoring and manual backfills separate from portfolio research
-  # and plan generation. Post-deploy DB maintenance still runs once via
+  # [MIGRATED] Scoring-only role from the stock-scoring-system image. Profile
+  # scorer-local keeps the singleton scheduler on this host; omit it when
+  # QUANT_SCORER_RUNTIME=external_k8s. Post-deploy DB maintenance runs once via
   # apps/hooks/quant-scorer-post.sh (ensure_portfolio_indexes +
   # seed_portfolio_param_presets).
   quant-scorer:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer:${QUANT_SCORER_IMAGE_TAG:-latest}
     container_name: quant-scorer
+    profiles: ["scorer-local"]
     restart: unless-stopped
     command: ["/app/start.scorer.sh"]
     env_file:

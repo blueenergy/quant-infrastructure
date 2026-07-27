@@ -3,8 +3,8 @@
 # - Uses docker-compose.dev.yml (build from source)
 # - Interpolates ${VAR} from apps/.env by default (see .env.example, DEV ONLY)
 # - Per-service runtime config comes from each repo's .env via env_file in the compose file
-# - COMPOSE_PROFILES from apps/.env (default research-local) gates quant-researcher;
-#   see README "Portfolio research runtime" for local_docker vs external_k8s.
+# - COMPOSE_PROFILES from apps/.env gates local quant-researcher/quant-scorer;
+#   see README for local_docker vs external_k8s runtimes.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

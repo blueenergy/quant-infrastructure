@@ -13,7 +13,7 @@ resources:
   - quant-analyzer.yaml
   - quant-data-engine.yaml
   - backtest-worker.yaml
-  - quant-scorer.yaml
+  # quant-scorer is deployed separately by ../deploy-quant-scorer.sh.
   # quant-researcher is deployed separately by ../deploy-quant-researcher.sh,
   # which resolves its repository + versions.env tag.
   - web.yaml
@@ -46,9 +46,6 @@ images:
   - name: backtest-worker
     newName: localhost:5000/backtest-worker
     newTag: v2
-  - name: quant-scorer
-    newName: localhost:5000/quant-scorer
-    newTag: latest
   - name: quant-web
     newName: localhost:5000/quant-web
     newTag: latest

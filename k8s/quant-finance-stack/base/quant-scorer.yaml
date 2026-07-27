@@ -1,12 +1,22 @@
+# Standalone daily stock scorer (external_k8s).
+# Run exactly one scheduler against a database: its flock is Pod-local and
+# does not coordinate with a Compose scorer or another replica.
+#
+# Namespace and image are supplied by the deploy helper:
+#
+#   K8S_NAMESPACE=aipoc ../deploy-quant-scorer.sh
+#
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: quant-scorer
-  namespace: quant-finance
   labels:
     app: quant-scorer
 spec:
   replicas: 1
+  strategy:
+    # Avoid briefly running two cron schedulers during an image rollout.
+    type: Recreate
   selector:
     matchLabels:
       app: quant-scorer
@@ -15,16 +25,42 @@ spec:
       labels:
         app: quant-scorer
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: scorer
+          # Placeholder replaced by ../deploy-quant-scorer.sh.
           image: quant-scorer:latest
           imagePullPolicy: IfNotPresent
+          command: ["/app/start.scorer.sh"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
           envFrom:
-            - configMapRef:
-                name: quant-config
             - secretRef:
                 name: quant-secrets
           env:
+            # Tushare persists its token at $HOME/tk.csv.
+            - name: HOME
+              value: /tmp
+            - name: TZ
+              value: Asia/Shanghai
+            - name: DATA_DB_NAME
+              value: quant_data
+            # score_util.py uses this ThreadPool size for the daily run.
+            - name: MAX_WORKERS
+              value: "8"
             - name: MONGO_URL
               valueFrom:
                 secretKeyRef:
@@ -35,16 +71,16 @@ spec:
                 secretKeyRef:
                   name: quant-secrets
                   key: MONGO_DB
+          resources:
+            requests:
+              cpu: "2"
+              memory: "4Gi"
+            limits:
+              cpu: "8"
+              memory: "12Gi"
           volumeMounts:
             - name: logs
               mountPath: /app/logs
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "256Mi"
-            limits:
-              cpu: "2"
-              memory: "2Gi"
       volumes:
         - name: logs
           emptyDir: {}

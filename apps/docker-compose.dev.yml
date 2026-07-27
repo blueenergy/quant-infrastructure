@@ -307,12 +307,13 @@ services:
         max-file: "3"
 
   # 股票评分系统 (每日19:00定时评分)
-  # 与 quant-researcher / quant-portfolio 共用同一镜像，靠 command 区分角色。
+  # Profile scorer-local: omit when QUANT_SCORER_RUNTIME=external_k8s.
   quant-scorer:
     build:
       context: ../../stock-scoring-system
       dockerfile: Dockerfile
     container_name: quant-scorer
+    profiles: [ "scorer-local" ]
     command: [ "/app/start.scorer.sh" ]
     env_file:
       - path: ../../stock-scoring-system/.env

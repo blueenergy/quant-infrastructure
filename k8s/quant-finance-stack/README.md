@@ -42,6 +42,11 @@ quant-finance-stack/
 `QUANT_SCORER_IMAGE_REPOSITORY` 提供，tag 读取
 `apps/versions.env` 的 `QUANT_SCORER_IMAGE_TAG`。
 
+`quant-scorer.yaml` 同样不纳入整栈 kustomize。将
+`QUANT_SCORER_RUNTIME=external_k8s` 并停止 Compose scorer 后，使用
+`deploy-quant-scorer.sh` 部署到目标 namespace。该 Deployment 固定单副本并
+使用 `Recreate` 策略，避免升级期间出现两个 19:00 定时评分器。
+
 ## K3s 快速步骤
 
 1. **构建并推送镜像**（示例标签 `latest`，生产请用版本号）  

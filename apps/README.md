@@ -102,9 +102,42 @@ cp -n .env.example .env   # first time; edit secrets
 ./compose-dev.sh config          # render check
 ./compose-dev.sh up -d --build quant-api quant-researcher
 ./compose-dev.sh --profile frontend up -d quant-web
-# research-local is on by default via COMPOSE_PROFILES in apps/.env
-# (PORTFOLIO_RESEARCH_RUNTIME=local_docker). See "Portfolio research runtime".
+# research-local and scorer-local are on by default via COMPOSE_PROFILES.
 ```
+
+## Daily scorer runtime
+
+`quant-scorer` runs the weekday 19:00 scoring schedule. Run exactly one
+scheduler per database: its `flock` is local to one container/Pod and does not
+prevent duplicate work across hosts.
+
+For local Compose, keep:
+
+```bash
+QUANT_SCORER_RUNTIME=local_docker
+COMPOSE_PROFILES=research-local,scorer-local
+```
+
+For Kubernetes, set `QUANT_SCORER_RUNTIME=external_k8s`, remove
+`scorer-local` from `COMPOSE_PROFILES`, then stop the Compose service. Production
+`deploy.sh` performs that stop/removal automatically; for dev use:
+
+```bash
+./compose-dev.sh --profile scorer-local stop quant-scorer
+./compose-dev.sh --profile scorer-local rm -f quant-scorer
+```
+
+Deploy the singleton K8s scheduler from an FCI-connected host:
+
+```bash
+K8S_NAMESPACE=aipoc \
+  k8s/quant-finance-stack/deploy-quant-scorer.sh
+```
+
+The helper resolves the ACR repository from `apps/.env` and the immutable tag
+from `apps/versions.env`. The default Pod uses one replica, a `Recreate`
+strategy, `MAX_WORKERS=8`, and an 8-CPU/12-GiB limit. Do not scale replicas
+without first adding a distributed scoring lock or explicit work sharding.
 
 ## Portfolio research runtime
 
@@ -123,7 +156,8 @@ against the same queue.
 ```bash
 # apps/.env
 PORTFOLIO_RESEARCH_RUNTIME=local_docker
-COMPOSE_PROFILES=research-local
+QUANT_SCORER_RUNTIME=local_docker
+COMPOSE_PROFILES=research-local,scorer-local
 
 ./compose-dev.sh up -d quant-researcher
 # or any up that includes the research-local profile
@@ -135,7 +169,8 @@ COMPOSE_PROFILES=research-local
 
 ```bash
 PORTFOLIO_RESEARCH_RUNTIME=external_k8s
-COMPOSE_PROFILES=
+# Keep scorer-local unless QUANT_SCORER_RUNTIME is also external_k8s.
+COMPOSE_PROFILES=scorer-local
 ```
 
 2. Stop any local researcher still running:
