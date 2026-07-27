@@ -30,9 +30,17 @@ quant-finance-stack/
     ├── quant-data-engine.yaml
     ├── backtest-worker.yaml
     ├── quant-scorer.yaml
+    ├── quant-researcher.yaml # 可选；external_k8s 时启用（见 apps/README）
     ├── web.yaml
     └── ingress-web.yaml      # 可选；默认在 kustomization 中注释掉
 ```
+
+`quant-researcher.yaml` 默认不纳入整栈 kustomize。启用前请在 Compose 主机设置
+`PORTFOLIO_RESEARCH_RUNTIME=external_k8s`，避免本机 `research-local` profile
+与集群 worker 同时抢同一 Mongo 队列。使用
+`deploy-quant-researcher.sh` 单独部署：镜像仓库由
+`QUANT_SCORER_IMAGE_REPOSITORY` 提供，tag 读取
+`apps/versions.env` 的 `QUANT_SCORER_IMAGE_TAG`。
 
 ## K3s 快速步骤
 
@@ -89,6 +97,7 @@ quant-finance-stack/
 | quant-data-engine         | （未建 Service，仅内部 Pod）       | 可按需加 |
 | backtest-worker           | （同上）                           |      |
 | quant-scorer              | （同上）                           |      |
+| quant-researcher          | （同上；草稿 YAML，默认未纳入 kustomize） |      |
 | web                       | `quant-web`                       | 80   |
 
 集群内 DNS 示例：`http://quant-api.quant-finance.svc.cluster.local:3001`（与 `configmap.yaml` 中 `INTERNAL_API_BASE` 一致）。

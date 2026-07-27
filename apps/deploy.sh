@@ -35,6 +35,73 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S %z')] $*"; }
 # compose file, so they don't need to be passed here.
 COMPOSE=(docker compose --env-file versions.env)
 
+# Read KEY=value from env/common.env without sourcing the whole secrets file.
+_common_env_get() {
+  local key="$1"
+  local file="$SCRIPT_DIR/env/common.env"
+  [ -f "$file" ] || return 0
+  grep -E "^${key}=" "$file" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true
+}
+
+# local_docker -> enable research-local profile; external_k8s -> omit it.
+resolve_research_compose_profiles() {
+  if [ -n "${COMPOSE_PROFILES+x}" ] && [ -n "${COMPOSE_PROFILES}" ]; then
+    export COMPOSE_PROFILES
+    log "COMPOSE_PROFILES already set: ${COMPOSE_PROFILES}"
+    return 0
+  fi
+
+  local runtime profiles
+  runtime="$(_common_env_get PORTFOLIO_RESEARCH_RUNTIME)"
+  profiles="$(_common_env_get COMPOSE_PROFILES)"
+  runtime="${runtime:-local_docker}"
+
+  if [ -n "$profiles" ]; then
+    export COMPOSE_PROFILES="$profiles"
+  elif [ "$runtime" = "external_k8s" ]; then
+    # Empty profiles: quant-researcher (profile research-local) stays down.
+    export COMPOSE_PROFILES=""
+  else
+    export COMPOSE_PROFILES="research-local"
+  fi
+  log "PORTFOLIO_RESEARCH_RUNTIME=${runtime} COMPOSE_PROFILES=${COMPOSE_PROFILES:-<empty>}"
+}
+
+filter_services_for_research_runtime() {
+  local runtime
+  runtime="$(_common_env_get PORTFOLIO_RESEARCH_RUNTIME)"
+  runtime="${runtime:-local_docker}"
+  if [ "$runtime" != "external_k8s" ]; then
+    return 0
+  fi
+  local -a kept=()
+  local svc
+  for svc in "${SERVICES[@]}"; do
+    if [ "$svc" = "quant-researcher" ]; then
+      log "Skipping quant-researcher (PORTFOLIO_RESEARCH_RUNTIME=external_k8s)"
+      continue
+    fi
+    kept+=("$svc")
+  done
+  SERVICES=("${kept[@]}")
+}
+
+stop_local_researcher_for_external_runtime() {
+  local runtime
+  runtime="$(_common_env_get PORTFOLIO_RESEARCH_RUNTIME)"
+  runtime="${runtime:-local_docker}"
+  if [ "$runtime" != "external_k8s" ]; then
+    return 0
+  fi
+
+  # Disabling a Compose profile does not stop a container that is already
+  # running. Explicitly remove the local consumer before K8s workers take over.
+  log "Stopping local quant-researcher (PORTFOLIO_RESEARCH_RUNTIME=external_k8s)"
+  "${COMPOSE[@]}" --profile research-local stop quant-researcher || true
+  "${COMPOSE[@]}" --profile research-local rm -f quant-researcher || true
+  log "K8s quant-researcher is deployed separately from an FCI-connected host"
+}
+
 require_files() {
   for f in docker-compose.yml versions.env; do
     if [ ! -f "$f" ]; then
@@ -70,6 +137,19 @@ run_hook() {
 
 main() {
   require_files
+  resolve_research_compose_profiles
+  stop_local_researcher_for_external_runtime
+
+  local explicit_services=0
+  if [ "${#SERVICES[@]}" -gt 0 ]; then
+    explicit_services=1
+  fi
+  filter_services_for_research_runtime
+  if [ "$explicit_services" -eq 1 ] && [ "${#SERVICES[@]}" -eq 0 ]; then
+    log "No services left to deploy after research-runtime filter"
+    return 0
+  fi
+
   acr_login
 
   local up_flags=(-d --remove-orphans)

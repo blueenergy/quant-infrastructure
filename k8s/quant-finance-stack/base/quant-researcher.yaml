@@ -1,0 +1,111 @@
+# Standalone portfolio research worker (external_k8s).
+# Same stock-scoring-system image as Compose quant-researcher.
+# Consumes quant_trading.portfolio_research_jobs via MONGO_URI in Secret
+# "quant-secrets". Do not also run Compose profile research-local against
+# the same Mongo queue (set PORTFOLIO_RESEARCH_RUNTIME=external_k8s).
+#
+# Namespace and image are rendered by the deploy helper:
+#
+#   K8S_NAMESPACE=aipoc ../deploy-quant-researcher.sh
+#
+# Reports use emptyDir by default so clusters without working dynamic
+# provisioning can still schedule. Re-add a PVC when StorageClass works.
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quant-researcher
+  labels:
+    app: quant-researcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quant-researcher
+  template:
+    metadata:
+      labels:
+        app: quant-researcher
+    spec:
+      imagePullSecrets:
+        - name: artifactory-cred
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: researcher
+          # Placeholder replaced by ../deploy-quant-researcher.sh.
+          # Repository comes from QUANT_SCORER_IMAGE_REPOSITORY; tag comes
+          # from apps/versions.env (QUANT_SCORER_IMAGE_TAG).
+          image: quant-scorer:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/app/start.researcher.sh"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          envFrom:
+            - secretRef:
+                name: quant-secrets
+          env:
+            - name: TZ
+              value: Asia/Shanghai
+            - name: PORTFOLIO_RESEARCH_RUNTIME
+              value: external_k8s
+            - name: PORTFOLIO_RESEARCH_REPORT_DIR
+              value: /app/reports/portfolio-research
+            - name: PORTFOLIO_RESEARCH_CHECKPOINT_DIR
+              value: /app/reports/portfolio-research/checkpoints
+            - name: PORTFOLIO_RESEARCH_PANEL_CACHE_DIR
+              value: /app/reports/portfolio-research/panel-cache
+            # Prefer scaling replicas over raising sweep workers (memory).
+            - name: PORTFOLIO_RESEARCH_SWEEP_WORKERS
+              value: "1"
+            - name: PORTFOLIO_RESEARCH_LOOP_INTERVAL_SECONDS
+              value: "5"
+            - name: PORTFOLIO_RESEARCH_LOOP_LIMIT
+              value: "2"
+            - name: PORTFOLIO_RESEARCH_WORKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MONGO_URI
+            - name: MONGO_DB
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MONGO_DB
+          volumeMounts:
+            - name: reports
+              mountPath: /app/reports/portfolio-research
+            - name: logs
+              mountPath: /app/logs
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "10Gi"
+      volumes:
+        - name: reports
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}

@@ -102,7 +102,73 @@ cp -n .env.example .env   # first time; edit secrets
 ./compose-dev.sh config          # render check
 ./compose-dev.sh up -d --build quant-api quant-researcher
 ./compose-dev.sh --profile frontend up -d quant-web
+# research-local is on by default via COMPOSE_PROFILES in apps/.env
+# (PORTFOLIO_RESEARCH_RUNTIME=local_docker). See "Portfolio research runtime".
 ```
+
+## Portfolio research runtime
+
+Research jobs live in Mongo (`quant_trading.portfolio_research_jobs`). The
+**API/UI** can stay on Compose while **workers** run either on the same host
+or on Kubernetes. Pick one worker location per environment — do not run both
+against the same queue.
+
+| `PORTFOLIO_RESEARCH_RUNTIME` | Compose `quant-researcher` | Workers |
+|---|---|---|
+| `local_docker` (default) | Started via profile `research-local` | This host |
+| `external_k8s` | Not started (`COMPOSE_PROFILES` omits `research-local`) | `k8s/.../quant-researcher.yaml` |
+
+**Local Docker (default)**
+
+```bash
+# apps/.env
+PORTFOLIO_RESEARCH_RUNTIME=local_docker
+COMPOSE_PROFILES=research-local
+
+./compose-dev.sh up -d quant-researcher
+# or any up that includes the research-local profile
+```
+
+**External K8s**
+
+1. On the Compose host (`apps/.env` or production `env/common.env`):
+
+```bash
+PORTFOLIO_RESEARCH_RUNTIME=external_k8s
+COMPOSE_PROFILES=
+```
+
+2. Stop any local researcher still running:
+
+```bash
+./compose-dev.sh --profile research-local stop quant-researcher   # dev
+# prod: deploy.sh stops/removes it automatically before skipping the profile
+```
+
+3. Deploy only the researcher (draft; still ⚠️ not production-validated).
+   Configure the K8s image repository in `apps/.env`; the deploy script reads
+   its immutable tag from `apps/versions.env` (`QUANT_SCORER_IMAGE_TAG`):
+
+```bash
+# Needs Secret quant-secrets (MONGO_URI/MONGO_DB) and imagePullSecret
+# artifactory-cred for Espoo prime-local (HTTPS).
+# apps/.env:
+# QUANT_SCORER_IMAGE_REPOSITORY=<registry>/<path>/quant-scorer
+K8S_NAMESPACE=aipoc \
+  k8s/quant-finance-stack/deploy-quant-researcher.sh
+```
+
+   Use `--render` to inspect the resolved manifest without changing the
+   cluster. Do not apply `base/quant-researcher.yaml` directly: its image is
+   intentionally a neutral placeholder.
+
+**Tuning**
+
+- Single job sweep parallelism: `PORTFOLIO_RESEARCH_SWEEP_WORKERS` (Compose:
+  `stock-scoring-system/.env` / `env/quant-scorer.env`; K8s default `1`).
+- Multi-job parallelism: scale K8s `replicas` (each Pod gets a unique
+  `PORTFOLIO_RESEARCH_WORKER_ID` from the Pod name). Prefer replicas over
+  raising sweep workers to limit OOM risk.
 
 **Env model (dev only):**
 

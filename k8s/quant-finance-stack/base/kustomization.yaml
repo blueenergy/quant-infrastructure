@@ -14,6 +14,8 @@ resources:
   - quant-data-engine.yaml
   - backtest-worker.yaml
   - quant-scorer.yaml
+  # quant-researcher is deployed separately by ../deploy-quant-researcher.sh,
+  # which resolves its repository + versions.env tag.
   - web.yaml
   # Uncomment when DNS / TLS ready:
   # - ingress-web.yaml

@@ -345,11 +345,15 @@ services:
         max-file: "3"
 
   # 组合研究 worker (消费 portfolio research 任务队列)
+  # Profile research-local: enable for local_docker runtime (default via
+  # COMPOSE_PROFILES in apps/.env). Omit the profile when research runs on
+  # external K8s — see apps/README "Portfolio research runtime".
   quant-researcher:
     build:
       context: ../../stock-scoring-system
       dockerfile: Dockerfile
     container_name: quant-researcher
+    profiles: [ "research-local" ]
     command: [ "/app/start.researcher.sh" ]
     env_file:
       - path: ../../stock-scoring-system/.env
@@ -361,6 +365,7 @@ services:
       - MAX_WORKERS=${SCORING_MAX_WORKERS:-6}
       - TZ=Asia/Shanghai
       - PORTFOLIO_RESEARCH_REPORT_DIR=/app/reports/portfolio-research
+      - PORTFOLIO_RESEARCH_RUNTIME=${PORTFOLIO_RESEARCH_RUNTIME:-local_docker}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

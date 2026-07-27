@@ -205,10 +205,12 @@ services:
 
   # [MIGRATED] Portfolio research role from the stock-scoring-system image.
   # It consumes research jobs and writes reports to the shared volume read by
-  # quant-api.
+  # quant-api. Profile research-local keeps it on this Compose host; omit the
+  # profile (PORTFOLIO_RESEARCH_RUNTIME=external_k8s) when workers run in K8s.
   quant-researcher:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer:${QUANT_SCORER_IMAGE_TAG:-latest}
     container_name: quant-researcher
+    profiles: ["research-local"]
     restart: unless-stopped
     command: ["/app/start.researcher.sh"]
     env_file:
@@ -217,6 +219,7 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - PORTFOLIO_RESEARCH_REPORT_DIR=/app/reports/portfolio-research
+      - PORTFOLIO_RESEARCH_RUNTIME=${PORTFOLIO_RESEARCH_RUNTIME:-local_docker}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
