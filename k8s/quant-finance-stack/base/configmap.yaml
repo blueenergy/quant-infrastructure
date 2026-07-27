@@ -27,7 +27,7 @@ data:
   MAX_WORKERS: "6"
   # Portfolio research defaults when quant-researcher runs in-cluster.
   PORTFOLIO_RESEARCH_RUNTIME: "external_k8s"
-  PORTFOLIO_RESEARCH_SWEEP_WORKERS: "1"
+  PORTFOLIO_RESEARCH_SWEEP_WORKERS: "6"
   PORTFOLIO_RESEARCH_LOOP_INTERVAL_SECONDS: "5"
   PORTFOLIO_RESEARCH_LOOP_LIMIT: "2"
   EMBEDDINGS_MODEL: "text-embedding-v3"

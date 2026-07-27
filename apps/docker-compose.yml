@@ -251,6 +251,7 @@ services:
   quant-portfolio:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer:${QUANT_SCORER_IMAGE_TAG:-latest}
     container_name: quant-portfolio
+    profiles: ["portfolio-local"]
     restart: unless-stopped
     command: ["/app/start.portfolio.sh"]
     env_file:
@@ -290,6 +291,7 @@ services:
   quant-data-engine:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-data-engine:${QUANT_DATA_ENGINE_IMAGE_TAG:-latest}
     container_name: quant-data-engine
+    profiles: ["data-engine-local"]
     restart: unless-stopped
     network_mode: host
     env_file:
@@ -308,6 +310,7 @@ services:
   backtest-worker:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/backtest-worker:${BACKTEST_WORKER_IMAGE_TAG:-latest}
     container_name: backtest-worker
+    profiles: ["backtest-local"]
     restart: unless-stopped
     env_file:
       - env/common.env
@@ -335,6 +338,7 @@ services:
   # is omitted — code ships in the image.
   quant-analyzer:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-analyzer:${QUANT_ANALYZER_IMAGE_TAG:-latest}
+    profiles: ["analyzer-local"]
     restart: unless-stopped
     env_file:
       - env/common.env

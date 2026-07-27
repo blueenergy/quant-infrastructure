@@ -1,30 +1,17 @@
-apiVersion: v1
-kind: Service
-metadata:
-  name: quant-analyzer
-  namespace: quant-finance
-  labels:
-    app: quant-analyzer
-spec:
-  clusterIP: None
-  selector:
-    app: quant-analyzer
-  # Headless service for StatefulSet pod DNS only (workers may not listen on TCP).
-  ports:
-    - name: noop
-      port: 80
-      targetPort: 80
----
+# Standalone quant-analyzer worker (external_k8s).
+#
+#   K8S_NAMESPACE=aipoc ../deploy-quant-role.sh analyzer
+#
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: quant-analyzer
-  namespace: quant-finance
   labels:
     app: quant-analyzer
 spec:
-  serviceName: quant-analyzer
-  replicas: 2
+  replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: quant-analyzer
@@ -38,15 +25,20 @@ spec:
           image: quant-analyzer:latest
           imagePullPolicy: IfNotPresent
           envFrom:
-            - configMapRef:
-                name: quant-config
             - secretRef:
                 name: quant-secrets
           env:
+            - name: TZ
+              value: Asia/Shanghai
             - name: WORKER_ID
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MONGO_URI
             - name: MONGO_DB
               valueFrom:
                 secretKeyRef:
@@ -57,16 +49,34 @@ spec:
                 secretKeyRef:
                   name: quant-secrets
                   key: MONGO_DB
-          volumeMounts:
-            - name: logs
-              mountPath: /app/logs
+            - name: DATA_DB_NAME
+              value: quant_data
+            - name: ANALYZER_DB_NAME
+              value: quant_analyzer
+            - name: ANALYSIS_INTERVAL
+              value: "300"
+            - name: DISABLE_AUTO_ANALYSIS
+              value: "true"
+            - name: DEFAULT_LLM_PROVIDER
+              value: qwen
+            - name: DEFAULT_MODEL
+              value: qwen-plus
+            - name: LIMIT_UP_ATTRIBUTION_MODE
+              value: legacy_daily
+            - name: LIMIT_UP_TRIGGER_MODE
+              value: scheduled
+            - name: ETF_ANALYSIS_RESPONSE_FORMAT
+              value: auto
           resources:
             requests:
-              cpu: "200m"
-              memory: "512Mi"
+              cpu: "500m"
+              memory: "1Gi"
             limits:
               cpu: "4"
               memory: "4Gi"
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
       volumes:
         - name: logs
           emptyDir: {}

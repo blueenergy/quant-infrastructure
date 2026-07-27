@@ -1,12 +1,17 @@
+# Standalone quant-data-engine (external_k8s). Singleton cron + sync loops.
+#
+#   K8S_NAMESPACE=aipoc ../deploy-quant-role.sh data-engine
+#
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: quant-data-engine
-  namespace: quant-finance
   labels:
     app: quant-data-engine
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: quant-data-engine
@@ -15,16 +20,34 @@ spec:
       labels:
         app: quant-data-engine
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: engine
           image: quant-data-engine:latest
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
           envFrom:
-            - configMapRef:
-                name: quant-config
             - secretRef:
                 name: quant-secrets
           env:
+            - name: HOME
+              value: /tmp
+            - name: TZ
+              value: Asia/Shanghai
             - name: MONGO_DB
               valueFrom:
                 secretKeyRef:
@@ -35,6 +58,12 @@ spec:
                 secretKeyRef:
                   name: quant-secrets
                   key: MONGO_DB
+            - name: DATA_DB_NAME
+              value: quant_data
+            - name: REALTIME_DB_NAME
+              value: quant_realtime
+            - name: DEPLOY_MODE
+              value: full
             - name: SECONDARY_MONGO_URI
               valueFrom:
                 secretKeyRef:
@@ -47,16 +76,24 @@ spec:
                   name: quant-secrets
                   key: SECONDARY_MONGO_DB
                   optional: true
+            - name: INTRADAY_T0_TRIGGER_URL
+              value: "__INTRADAY_T0_TRIGGER_URL__"
+            - name: INTRADAY_T0_TRIGGER_KEY
+              value: "__INTRADAY_T0_TRIGGER_KEY__"
+            - name: MARKET_INSIGHT_TRIGGER_URL
+              value: "__MARKET_INSIGHT_TRIGGER_URL__"
+            - name: MARKET_INSIGHT_TRIGGER_KEY
+              value: "__MARKET_INSIGHT_TRIGGER_KEY__"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "4"
+              memory: "4Gi"
           volumeMounts:
             - name: logs
               mountPath: /app/logs
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "256Mi"
-            limits:
-              cpu: "2"
-              memory: "2Gi"
       volumes:
         - name: logs
           emptyDir: {}

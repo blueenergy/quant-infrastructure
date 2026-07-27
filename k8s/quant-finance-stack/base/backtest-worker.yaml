@@ -1,12 +1,17 @@
+# Standalone backtest-worker (external_k8s). Single replica; screening must not duplicate.
+#
+#   K8S_NAMESPACE=aipoc ../deploy-quant-role.sh backtest
+#
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backtest-worker
-  namespace: quant-finance
   labels:
     app: backtest-worker
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: backtest-worker
@@ -20,16 +25,18 @@ spec:
           image: backtest-worker:latest
           imagePullPolicy: IfNotPresent
           envFrom:
-            - configMapRef:
-                name: quant-config
             - secretRef:
                 name: quant-secrets
           env:
-            - name: MONGO_DB
+            - name: TZ
+              value: Asia/Shanghai
+            - name: MONGO_URI
               valueFrom:
                 secretKeyRef:
                   name: quant-secrets
-                  key: MONGO_DB
+                  key: MONGO_URI
+            - name: MONGO_DB
+              value: quant_data
             - name: DB_NAME
               valueFrom:
                 secretKeyRef:
@@ -40,20 +47,30 @@ spec:
                 secretKeyRef:
                   name: quant-secrets
                   key: MONGO_DB
+            - name: DATA_DB_NAME
+              value: quant_data
             - name: BACKTEST_WORKER_ID
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: ENABLE_SCREENING
+              value: "true"
+            - name: SCREENING_MODE
+              value: conservative
+            - name: LOG_LEVEL
+              value: INFO
+            - name: BACKTEST_POLL_INTERVAL
+              value: "5"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "4"
+              memory: "4Gi"
           volumeMounts:
             - name: cache
               mountPath: /app/cache
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "256Mi"
-            limits:
-              cpu: "2"
-              memory: "2Gi"
       volumes:
         - name: cache
           emptyDir: {}

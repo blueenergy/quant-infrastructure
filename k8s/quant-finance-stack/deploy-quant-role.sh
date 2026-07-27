@@ -1,100 +1,54 @@
 #!/usr/bin/env bash
-# Shared renderer/deployer for stock-scoring-system Kubernetes roles.
+# Shared renderer/deployer for quant worker roles on Kubernetes.
 #
 # Usage:
-#   deploy-quant-role.sh scorer [--render]
-#   deploy-quant-role.sh researcher [--render]
+#   deploy-quant-role.sh <role> [--render]
 #
-# K8S_REPLICAS overrides the manifest replica count. Without an override,
-# deployment preserves an existing Deployment's replica count and uses the
-# manifest default only on first creation.
+# Roles: scorer | researcher | portfolio | data-engine | backtest | analyzer
+#
+# K8S_REPLICAS overrides replica count where allowed (scorer/portfolio/data-engine/
+# backtest/analyzer must stay at 1 unless noted).
 set -euo pipefail
 
 show_help() {
   cat <<'EOF'
-Deploy a stock-scoring-system role to Kubernetes.
+Deploy a quant worker role to Kubernetes (namespace aipoc by default).
 
 Usage:
   deploy-quant-role.sh <role> [option]
   deploy-quant-role.sh --help
 
 Roles:
-  scorer       Weekday 19:00 stock-scoring scheduler. Must remain at 1 replica.
-  researcher   Portfolio-research queue worker. Supports multiple replicas.
+  scorer        Daily stock-scoring scheduler (singleton).
+  researcher    Portfolio-research queue worker (scalable).
+  portfolio     Plan generation + paper-trading cron (singleton).
+  data-engine   Market data sync + cron (singleton).
+  backtest      Backtest queue + screening (singleton).
+  analyzer      Analysis task worker (default singleton).
 
 Options:
-  --render     Print the resolved Kubernetes manifest without applying it.
-  -h, --help   Show this help and exit.
+  --render     Print resolved manifest without applying.
+  -h, --help   Show this help.
 
-Image configuration:
-  QUANT_SCORER_IMAGE_REPOSITORY
-      Image repository from the shell or apps/.env.
-  QUANT_SCORER_IMAGE_TAG
-      Immutable image tag read from apps/versions.env.
+Image tags come from apps/versions.env. Image repositories default from
+QUANT_SCORER_IMAGE_REPOSITORY parent path (wukongquant/*) or per-role overrides:
+  QUANT_DATA_ENGINE_IMAGE_REPOSITORY
+  BACKTEST_WORKER_IMAGE_REPOSITORY
+  QUANT_ANALYZER_IMAGE_REPOSITORY
 
-Deployment configuration:
-  K8S_NAMESPACE          Target namespace (default: aipoc).
-  K8S_REPLICAS           Explicit replica count. Scorer only accepts 1.
-  K8S_ROLLOUT_TIMEOUT    Rollout wait timeout (default: 10m).
-  K8S_DEPLOY_ENV_FILE    Runtime env file (default: apps/.env).
-  VERSIONS_FILE          Image versions file (default: apps/versions.env).
+Runtime gates (apps/env/common.env or apps/.env for dev):
+  QUANT_SCORER_RUNTIME, PORTFOLIO_RESEARCH_RUNTIME,
+  QUANT_PORTFOLIO_RUNTIME, QUANT_DATA_ENGINE_RUNTIME,
+  BACKTEST_WORKER_RUNTIME, QUANT_ANALYZER_RUNTIME
+  Each must be external_k8s before deploy (except --render).
 
-New cluster prerequisites:
-  1. Select a kubectl context and create the namespace:
-
-       kubectl config current-context
-       kubectl create namespace aipoc
-
-     Use K8S_NAMESPACE=<name> when the namespace is not aipoc.
-
-  2. Create quant-secrets from the provided template:
-
-       cp templates/secret.env.example templates/secret.env
-       # Edit templates/secret.env; never commit the populated file.
-       kubectl -n aipoc create secret generic quant-secrets \
-         --from-env-file=templates/secret.env \
-         --dry-run=client -o yaml | kubectl apply -f -
-
-     Both roles require MONGO_URI and MONGO_DB. Scorer also needs
-     TUSHARE_TOKEN. Researcher with external_k8s requires the complete
-     PORTFOLIO_RESEARCH_S3_* configuration and an existing aipoc bucket.
-
-  3. Verify Pod network access:
-     - MongoDB host and port in MONGO_URI must be reachable from worker nodes.
-     - Researcher must reach the configured eecloud S3 endpoint.
-     - Nodes must resolve and pull from the configured ACR repository.
-       The current ACR repository permits anonymous pulls, so no pull secret
-       is required.
-
-  4. Prevent duplicate schedulers/workers on the Compose host:
-     - Set QUANT_SCORER_RUNTIME=external_k8s before deploying scorer.
-     - Set PORTFOLIO_RESEARCH_RUNTIME=external_k8s before deploying researcher.
-     - Stop/remove the corresponding local Compose service.
-
-  5. Check the manifest before the first deployment:
-
-       ./deploy-quant-role.sh scorer --render
-       ./deploy-quant-role.sh researcher --render
-       kubectl auth can-i create deployments -n aipoc
-
-Runtime safety:
-  scorer requires QUANT_SCORER_RUNTIME=external_k8s.
-  researcher requires PORTFOLIO_RESEARCH_RUNTIME=external_k8s.
-  Without K8S_REPLICAS, an existing Deployment keeps its current replica count;
-  a new Deployment uses the replica count in its manifest.
-
-Examples:
-  ./deploy-quant-role.sh scorer --render
-  ./deploy-quant-role.sh scorer
-  K8S_REPLICAS=3 ./deploy-quant-role.sh researcher
-  K8S_NAMESPACE=aipoc K8S_ROLLOUT_TIMEOUT=15m \
-    ./deploy-quant-role.sh researcher
+K8S_NAMESPACE, K8S_REPLICAS, K8S_ROLLOUT_TIMEOUT, K8S_DEPLOY_ENV_FILE.
 EOF
 }
 
 usage() {
-  echo "Usage: $0 {scorer|researcher} [--render]" >&2
-  echo "Run '$0 --help' for detailed guidance." >&2
+  echo "Usage: $0 {scorer|researcher|portfolio|data-engine|backtest|analyzer} [--render]" >&2
+  echo "Run '$0 --help' for details." >&2
   exit 2
 }
 
@@ -108,24 +62,6 @@ esac
 
 ROLE="$1"
 shift
-
-case "$ROLE" in
-  scorer)
-    DEPLOYMENT="quant-scorer"
-    MANIFEST_NAME="quant-scorer.yaml"
-    RUNTIME_KEY="QUANT_SCORER_RUNTIME"
-    runtime_value="${QUANT_SCORER_RUNTIME:-}"
-    ;;
-  researcher)
-    DEPLOYMENT="quant-researcher"
-    MANIFEST_NAME="quant-researcher.yaml"
-    RUNTIME_KEY="PORTFOLIO_RESEARCH_RUNTIME"
-    runtime_value="${PORTFOLIO_RESEARCH_RUNTIME:-}"
-    ;;
-  *)
-    usage
-    ;;
-esac
 
 case "${1:-}" in
   -h | --help)
@@ -145,7 +81,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 VERSIONS_FILE="${VERSIONS_FILE:-$INFRA_ROOT/apps/versions.env}"
 DEPLOY_ENV_FILE="${K8S_DEPLOY_ENV_FILE:-$INFRA_ROOT/apps/.env}"
-MANIFEST="$SCRIPT_DIR/base/$MANIFEST_NAME"
+COMMON_ENV_FILE="${K8S_COMMON_ENV_FILE:-$INFRA_ROOT/apps/env/common.env}"
 NAMESPACE="${K8S_NAMESPACE:-aipoc}"
 ROLLOUT_TIMEOUT="${K8S_ROLLOUT_TIMEOUT:-10m}"
 
@@ -154,6 +90,66 @@ env_file_get() {
   [ -f "$file" ] || return 0
   awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "$file"
 }
+
+runtime_from_files() {
+  local key="$1"
+  local v
+  v="$(env_file_get "$key" "$DEPLOY_ENV_FILE")"
+  if [ -z "$v" ] && [ -f "$COMMON_ENV_FILE" ]; then
+    v="$(env_file_get "$key" "$COMMON_ENV_FILE")"
+  fi
+  echo "${v:-local_docker}"
+}
+
+case "$ROLE" in
+  scorer)
+    DEPLOYMENT="quant-scorer"
+    MANIFEST_NAME="quant-scorer.yaml"
+    RUNTIME_KEY="QUANT_SCORER_RUNTIME"
+    IMAGE_PLACEHOLDER="quant-scorer:latest"
+    TAG_KEY="QUANT_SCORER_IMAGE_TAG"
+  ;;
+  researcher)
+    DEPLOYMENT="quant-researcher"
+    MANIFEST_NAME="quant-researcher.yaml"
+    RUNTIME_KEY="PORTFOLIO_RESEARCH_RUNTIME"
+    IMAGE_PLACEHOLDER="quant-scorer:latest"
+    TAG_KEY="QUANT_SCORER_IMAGE_TAG"
+  ;;
+  portfolio)
+    DEPLOYMENT="quant-portfolio"
+    MANIFEST_NAME="quant-portfolio.yaml"
+    RUNTIME_KEY="QUANT_PORTFOLIO_RUNTIME"
+    IMAGE_PLACEHOLDER="quant-scorer:latest"
+    TAG_KEY="QUANT_SCORER_IMAGE_TAG"
+  ;;
+  data-engine)
+    DEPLOYMENT="quant-data-engine"
+    MANIFEST_NAME="quant-data-engine.yaml"
+    RUNTIME_KEY="QUANT_DATA_ENGINE_RUNTIME"
+    IMAGE_PLACEHOLDER="quant-data-engine:latest"
+    TAG_KEY="QUANT_DATA_ENGINE_IMAGE_TAG"
+  ;;
+  backtest)
+    DEPLOYMENT="backtest-worker"
+    MANIFEST_NAME="backtest-worker.yaml"
+    RUNTIME_KEY="BACKTEST_WORKER_RUNTIME"
+    IMAGE_PLACEHOLDER="backtest-worker:latest"
+    TAG_KEY="BACKTEST_WORKER_IMAGE_TAG"
+  ;;
+  analyzer)
+    DEPLOYMENT="quant-analyzer"
+    MANIFEST_NAME="quant-analyzer.yaml"
+    RUNTIME_KEY="QUANT_ANALYZER_RUNTIME"
+    IMAGE_PLACEHOLDER="quant-analyzer:latest"
+    TAG_KEY="QUANT_ANALYZER_IMAGE_TAG"
+  ;;
+  *)
+    usage
+    ;;
+esac
+
+MANIFEST="$SCRIPT_DIR/base/$MANIFEST_NAME"
 
 if [ ! -f "$VERSIONS_FILE" ]; then
   echo "ERROR: versions file not found: $VERSIONS_FILE" >&2
@@ -164,30 +160,47 @@ if [ ! -f "$MANIFEST" ]; then
   exit 1
 fi
 
-image_tag="$(env_file_get QUANT_SCORER_IMAGE_TAG "$VERSIONS_FILE")"
-image_repository="${QUANT_SCORER_IMAGE_REPOSITORY:-}"
-if [ -z "$image_repository" ]; then
-  image_repository="$(env_file_get QUANT_SCORER_IMAGE_REPOSITORY "$DEPLOY_ENV_FILE")"
-fi
-if [ -z "$runtime_value" ]; then
-  runtime_value="$(env_file_get "$RUNTIME_KEY" "$DEPLOY_ENV_FILE")"
-fi
-runtime_value="${runtime_value:-local_docker}"
-
-if [ -z "$image_repository" ]; then
-  echo "ERROR: set QUANT_SCORER_IMAGE_REPOSITORY in the environment or $DEPLOY_ENV_FILE" >&2
-  exit 1
-fi
+image_tag="$(env_file_get "$TAG_KEY" "$VERSIONS_FILE")"
 if [ -z "$image_tag" ]; then
-  echo "ERROR: QUANT_SCORER_IMAGE_TAG is missing from $VERSIONS_FILE" >&2
+  echo "ERROR: $TAG_KEY is missing from $VERSIONS_FILE" >&2
   exit 1
 fi
+
+scorer_repo="$(env_file_get QUANT_SCORER_IMAGE_REPOSITORY "$DEPLOY_ENV_FILE")"
+if [ -z "$scorer_repo" ]; then
+  scorer_repo="$(env_file_get QUANT_SCORER_IMAGE_REPOSITORY "$COMMON_ENV_FILE")"
+fi
+if [ -z "$scorer_repo" ]; then
+  echo "ERROR: set QUANT_SCORER_IMAGE_REPOSITORY in $DEPLOY_ENV_FILE or env/common.env" >&2
+  exit 1
+fi
+
+acr_parent="${scorer_repo%/*}"
+image_repository="$scorer_repo"
+case "$ROLE" in
+  data-engine)
+    image_repository="$(env_file_get QUANT_DATA_ENGINE_IMAGE_REPOSITORY "$DEPLOY_ENV_FILE")"
+    image_repository="${image_repository:-$(env_file_get QUANT_DATA_ENGINE_IMAGE_REPOSITORY "$COMMON_ENV_FILE")}"
+    image_repository="${image_repository:-${acr_parent}/quant-data-engine}"
+    ;;
+  backtest)
+    image_repository="$(env_file_get BACKTEST_WORKER_IMAGE_REPOSITORY "$DEPLOY_ENV_FILE")"
+    image_repository="${image_repository:-$(env_file_get BACKTEST_WORKER_IMAGE_REPOSITORY "$COMMON_ENV_FILE")}"
+    image_repository="${image_repository:-${acr_parent}/backtest-worker}"
+    ;;
+  analyzer)
+    image_repository="$(env_file_get QUANT_ANALYZER_IMAGE_REPOSITORY "$DEPLOY_ENV_FILE")"
+    image_repository="${image_repository:-$(env_file_get QUANT_ANALYZER_IMAGE_REPOSITORY "$COMMON_ENV_FILE")}"
+    image_repository="${image_repository:-${acr_parent}/quant-analyzer}"
+    ;;
+esac
+
 if [[ ! "$image_repository" =~ ^[A-Za-z0-9._:/-]+$ ]]; then
-  echo "ERROR: invalid QUANT_SCORER_IMAGE_REPOSITORY: $image_repository" >&2
+  echo "ERROR: invalid image repository: $image_repository" >&2
   exit 1
 fi
 if [[ ! "$image_tag" =~ ^[A-Za-z0-9._-]+$ ]]; then
-  echo "ERROR: invalid QUANT_SCORER_IMAGE_TAG: $image_tag" >&2
+  echo "ERROR: invalid image tag: $image_tag" >&2
   exit 1
 fi
 
@@ -196,16 +209,20 @@ if [ -n "$replicas" ] && [[ ! "$replicas" =~ ^[1-9][0-9]*$ ]]; then
   echo "ERROR: K8S_REPLICAS must be a positive integer: $replicas" >&2
   exit 1
 fi
-if [ "$ROLE" = "scorer" ] && [ -n "$replicas" ] && [ "$replicas" != "1" ]; then
-  echo "ERROR: quant-scorer must remain a singleton (K8S_REPLICAS=1)" >&2
+
+singleton_roles="scorer portfolio data-engine backtest analyzer"
+if [[ " $singleton_roles " == *" $ROLE "* ]] && [ -n "$replicas" ] && [ "$replicas" != "1" ]; then
+  echo "ERROR: $DEPLOYMENT must remain a singleton (K8S_REPLICAS=1)" >&2
   exit 1
 fi
 
 image="${image_repository}:${image_tag}"
+
 render_manifest() {
-  awk -v image="$image" -v replicas="$replicas" '
-    /^[[:space:]]+image: quant-scorer:latest[[:space:]]*$/ {
-      sub(/image: quant-scorer:latest/, "image: " image)
+  local out
+  out="$(awk -v image="$image" -v placeholder="$IMAGE_PLACEHOLDER" -v replicas="$replicas" '
+    $0 ~ ("image: " placeholder) {
+      sub("image: " placeholder, "image: " image)
       image_replaced++
     }
     replicas != "" && /^  replicas: [0-9]+[[:space:]]*$/ {
@@ -215,7 +232,7 @@ render_manifest() {
     { print }
     END {
       if (image_replaced != 1) {
-        print "ERROR: expected exactly one quant-scorer image placeholder" > "/dev/stderr"
+        print "ERROR: expected exactly one image placeholder " placeholder > "/dev/stderr"
         exit 1
       }
       if (replicas != "" && replicas_replaced != 1) {
@@ -223,7 +240,20 @@ render_manifest() {
         exit 1
       }
     }
-  ' "$MANIFEST"
+  ' "$MANIFEST")" || return 1
+
+  if [ "$ROLE" = "data-engine" ]; then
+    local api_host trigger_key
+    api_host="$(env_file_get K8S_QUANT_API_HOST "$DEPLOY_ENV_FILE")"
+    trigger_key="$(env_file_get HERMES_QUANT_INTERNAL_KEY "$DEPLOY_ENV_FILE")"
+    if [ -n "$api_host" ] && [ -n "$trigger_key" ]; then
+      out="${out//__INTRADAY_T0_TRIGGER_URL__/http://${api_host}:3001/api/intraday-t0/signals/generate-all}"
+      out="${out//__MARKET_INSIGHT_TRIGGER_URL__/http://${api_host}:3001/api/market-insights/generate-internal}"
+      out="${out//__INTRADAY_T0_TRIGGER_KEY__/$trigger_key}"
+      out="${out//__MARKET_INSIGHT_TRIGGER_KEY__/$trigger_key}"
+    fi
+  fi
+  printf '%s\n' "$out"
 }
 
 if [ "$MODE" = "render" ]; then
@@ -231,8 +261,9 @@ if [ "$MODE" = "render" ]; then
   exit 0
 fi
 
+runtime_value="$(runtime_from_files "$RUNTIME_KEY")"
 if [ "$runtime_value" != "external_k8s" ]; then
-  echo "ERROR: $RUNTIME_KEY must be external_k8s before deploying $DEPLOYMENT" >&2
+  echo "ERROR: $RUNTIME_KEY must be external_k8s before deploying $DEPLOYMENT (got ${runtime_value})" >&2
   exit 1
 fi
 
@@ -242,8 +273,8 @@ if [ -z "$replicas" ]; then
       -o jsonpath='{.spec.replicas}' 2>/dev/null || true
   )"
 fi
-if [ "$ROLE" = "scorer" ] && [ -n "$replicas" ] && [ "$replicas" != "1" ]; then
-  echo "ERROR: existing quant-scorer has $replicas replicas; reduce it to 1 before deployment" >&2
+if [[ " $singleton_roles " == *" $ROLE "* ]] && [ -n "$replicas" ] && [ "$replicas" != "1" ]; then
+  echo "ERROR: existing $DEPLOYMENT has $replicas replicas; reduce to 1 before deployment" >&2
   exit 1
 fi
 

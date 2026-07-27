@@ -179,6 +179,7 @@ services:
     build:
       context: ../../quantAnalyzer
       dockerfile: Dockerfile
+    profiles: ["analyzer-local"]
     env_file:
       - path: ../../quantAnalyzer/.env
         required: false
@@ -223,6 +224,7 @@ services:
       context: ../../quant-data-engine
       dockerfile: Dockerfile
     container_name: quant-data-engine
+    profiles: ["data-engine-local"]
     env_file:
       - path: ../../quant-data-engine/.env
         required: false
@@ -250,6 +252,7 @@ services:
       context: ../..
       dockerfile: backtest-worker/Dockerfile
     container_name: backtest-worker
+    profiles: ["backtest-local"]
     env_file:
       - path: ../../backtest-worker/.env
         required: false
@@ -395,6 +398,7 @@ services:
       context: ../../stock-scoring-system
       dockerfile: Dockerfile
     container_name: quant-portfolio
+    profiles: ["portfolio-local"]
     command: [ "/app/start.portfolio.sh" ]
     env_file:
       - path: ../../stock-scoring-system/.env

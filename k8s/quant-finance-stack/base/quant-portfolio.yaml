@@ -1,0 +1,78 @@
+# Standalone portfolio planning / paper-trading role (external_k8s).
+# Same stock-scoring-system image as Compose quant-portfolio.
+# Must remain a singleton (plan loop + supercronic cron).
+#
+#   K8S_NAMESPACE=aipoc ../deploy-quant-role.sh portfolio
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quant-portfolio
+  labels:
+    app: quant-portfolio
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: quant-portfolio
+  template:
+    metadata:
+      labels:
+        app: quant-portfolio
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: portfolio
+          image: quant-scorer:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/app/start.portfolio.sh"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          envFrom:
+            - secretRef:
+                name: quant-secrets
+          env:
+            - name: HOME
+              value: /tmp
+            - name: TZ
+              value: Asia/Shanghai
+            - name: DATA_DB_NAME
+              value: quant_data
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MONGO_URI
+            - name: MONGO_DB
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MONGO_DB
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "2"
+              memory: "1Gi"
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+      volumes:
+        - name: logs
+          emptyDir: {}

@@ -65,9 +65,9 @@ spec:
               value: /app/reports/portfolio-research/checkpoints
             - name: PORTFOLIO_RESEARCH_PANEL_CACHE_DIR
               value: /app/reports/portfolio-research/panel-cache
-            # Prefer scaling replicas over raising sweep workers (memory).
+            # Outer sweep ProcessPool size per job (10Gi pod limit; scale replicas for more jobs).
             - name: PORTFOLIO_RESEARCH_SWEEP_WORKERS
-              value: "1"
+              value: "6"
             - name: PORTFOLIO_RESEARCH_LOOP_INTERVAL_SECONDS
               value: "5"
             - name: PORTFOLIO_RESEARCH_LOOP_LIMIT

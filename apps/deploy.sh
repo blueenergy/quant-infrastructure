@@ -52,41 +52,85 @@ resolve_local_runtime_profiles() {
     return 0
   fi
 
-  local research_runtime scorer_runtime configured_profiles
+  local research_runtime scorer_runtime portfolio_runtime data_engine_runtime backtest_runtime analyzer_runtime configured_profiles
   local -a profiles=()
   research_runtime="$(_common_env_get PORTFOLIO_RESEARCH_RUNTIME)"
   scorer_runtime="$(_common_env_get QUANT_SCORER_RUNTIME)"
+  portfolio_runtime="$(_common_env_get QUANT_PORTFOLIO_RUNTIME)"
+  data_engine_runtime="$(_common_env_get QUANT_DATA_ENGINE_RUNTIME)"
+  backtest_runtime="$(_common_env_get BACKTEST_WORKER_RUNTIME)"
+  analyzer_runtime="$(_common_env_get QUANT_ANALYZER_RUNTIME)"
   configured_profiles="$(_common_env_get COMPOSE_PROFILES)"
   research_runtime="${research_runtime:-local_docker}"
   scorer_runtime="${scorer_runtime:-local_docker}"
+  portfolio_runtime="${portfolio_runtime:-local_docker}"
+  data_engine_runtime="${data_engine_runtime:-local_docker}"
+  backtest_runtime="${backtest_runtime:-local_docker}"
+  analyzer_runtime="${analyzer_runtime:-local_docker}"
 
   if [ -n "$configured_profiles" ]; then
     export COMPOSE_PROFILES="$configured_profiles"
   else
     [ "$research_runtime" = "local_docker" ] && profiles+=("research-local")
     [ "$scorer_runtime" = "local_docker" ] && profiles+=("scorer-local")
+    [ "$portfolio_runtime" = "local_docker" ] && profiles+=("portfolio-local")
+    [ "$data_engine_runtime" = "local_docker" ] && profiles+=("data-engine-local")
+    [ "$backtest_runtime" = "local_docker" ] && profiles+=("backtest-local")
+    [ "$analyzer_runtime" = "local_docker" ] && profiles+=("analyzer-local")
     local IFS=,
     export COMPOSE_PROFILES="${profiles[*]}"
   fi
-  log "PORTFOLIO_RESEARCH_RUNTIME=${research_runtime} QUANT_SCORER_RUNTIME=${scorer_runtime} COMPOSE_PROFILES=${COMPOSE_PROFILES:-<empty>}"
+  log "PORTFOLIO_RESEARCH_RUNTIME=${research_runtime} QUANT_SCORER_RUNTIME=${scorer_runtime} QUANT_PORTFOLIO_RUNTIME=${portfolio_runtime} QUANT_DATA_ENGINE_RUNTIME=${data_engine_runtime} BACKTEST_WORKER_RUNTIME=${backtest_runtime} QUANT_ANALYZER_RUNTIME=${analyzer_runtime} COMPOSE_PROFILES=${COMPOSE_PROFILES:-<empty>}"
+}
+
+_service_external_k8s() {
+  local svc="$1"
+  local runtime
+  case "$svc" in
+    quant-researcher) runtime="$(_common_env_get PORTFOLIO_RESEARCH_RUNTIME)" ;;
+    quant-scorer) runtime="$(_common_env_get QUANT_SCORER_RUNTIME)" ;;
+    quant-portfolio) runtime="$(_common_env_get QUANT_PORTFOLIO_RUNTIME)" ;;
+    quant-data-engine) runtime="$(_common_env_get QUANT_DATA_ENGINE_RUNTIME)" ;;
+    backtest-worker) runtime="$(_common_env_get BACKTEST_WORKER_RUNTIME)" ;;
+    quant-analyzer) runtime="$(_common_env_get QUANT_ANALYZER_RUNTIME)" ;;
+    *) return 1 ;;
+  esac
+  runtime="${runtime:-local_docker}"
+  [ "$runtime" = "external_k8s" ]
+}
+
+_service_compose_profile() {
+  local svc="$1"
+  case "$svc" in
+    quant-researcher) echo "research-local" ;;
+    quant-scorer) echo "scorer-local" ;;
+    quant-portfolio) echo "portfolio-local" ;;
+    quant-data-engine) echo "data-engine-local" ;;
+    backtest-worker) echo "backtest-local" ;;
+    quant-analyzer) echo "analyzer-local" ;;
+    *) return 1 ;;
+  esac
+}
+
+_runtime_env_key_for_service() {
+  local svc="$1"
+  case "$svc" in
+    quant-researcher) echo "PORTFOLIO_RESEARCH_RUNTIME" ;;
+    quant-scorer) echo "QUANT_SCORER_RUNTIME" ;;
+    quant-portfolio) echo "QUANT_PORTFOLIO_RUNTIME" ;;
+    quant-data-engine) echo "QUANT_DATA_ENGINE_RUNTIME" ;;
+    backtest-worker) echo "BACKTEST_WORKER_RUNTIME" ;;
+    quant-analyzer) echo "QUANT_ANALYZER_RUNTIME" ;;
+    *) return 1 ;;
+  esac
 }
 
 filter_services_for_external_runtimes() {
-  local research_runtime scorer_runtime
-  research_runtime="$(_common_env_get PORTFOLIO_RESEARCH_RUNTIME)"
-  scorer_runtime="$(_common_env_get QUANT_SCORER_RUNTIME)"
-  research_runtime="${research_runtime:-local_docker}"
-  scorer_runtime="${scorer_runtime:-local_docker}"
-
   local -a kept=()
   local svc
   for svc in "${SERVICES[@]}"; do
-    if [ "$svc" = "quant-researcher" ] && [ "$research_runtime" = "external_k8s" ]; then
-      log "Skipping quant-researcher (PORTFOLIO_RESEARCH_RUNTIME=external_k8s)"
-      continue
-    fi
-    if [ "$svc" = "quant-scorer" ] && [ "$scorer_runtime" = "external_k8s" ]; then
-      log "Skipping quant-scorer (QUANT_SCORER_RUNTIME=external_k8s)"
+    if _service_external_k8s "$svc"; then
+      log "Skipping $svc ($(_runtime_env_key_for_service "$svc")=external_k8s)"
       continue
     fi
     kept+=("$svc")
@@ -95,29 +139,19 @@ filter_services_for_external_runtimes() {
 }
 
 stop_local_services_for_external_runtimes() {
-  local research_runtime scorer_runtime
-  research_runtime="$(_common_env_get PORTFOLIO_RESEARCH_RUNTIME)"
-  scorer_runtime="$(_common_env_get QUANT_SCORER_RUNTIME)"
-  research_runtime="${research_runtime:-local_docker}"
-  scorer_runtime="${scorer_runtime:-local_docker}"
+  local svc profile runtime_key any_external=0
+  for svc in quant-researcher quant-scorer quant-portfolio quant-data-engine backtest-worker quant-analyzer; do
+    if _service_external_k8s "$svc"; then
+      any_external=1
+      profile="$(_service_compose_profile "$svc")"
+      runtime_key="$(_runtime_env_key_for_service "$svc")"
+      log "Stopping local $svc (${runtime_key}=external_k8s)"
+      "${COMPOSE[@]}" --profile "$profile" stop "$svc" 2>/dev/null || true
+      "${COMPOSE[@]}" --profile "$profile" rm -f "$svc" 2>/dev/null || true
+    fi
+  done
 
-  if [ "$research_runtime" = "external_k8s" ]; then
-    # Disabling a Compose profile does not stop a container that is already
-    # running. Explicitly remove the local consumer before K8s workers take over.
-    log "Stopping local quant-researcher (PORTFOLIO_RESEARCH_RUNTIME=external_k8s)"
-    "${COMPOSE[@]}" --profile research-local stop quant-researcher || true
-    "${COMPOSE[@]}" --profile research-local rm -f quant-researcher || true
-  fi
-
-  if [ "$scorer_runtime" = "external_k8s" ]; then
-    # The scorer's flock is local to one container, so two schedulers must
-    # never run against the same database.
-    log "Stopping local quant-scorer (QUANT_SCORER_RUNTIME=external_k8s)"
-    "${COMPOSE[@]}" --profile scorer-local stop quant-scorer || true
-    "${COMPOSE[@]}" --profile scorer-local rm -f quant-scorer || true
-  fi
-
-  if [ "$research_runtime" = "external_k8s" ] || [ "$scorer_runtime" = "external_k8s" ]; then
+  if [ "$any_external" -eq 1 ]; then
     log "External K8s roles are deployed separately from an FCI-connected host"
   fi
 }
