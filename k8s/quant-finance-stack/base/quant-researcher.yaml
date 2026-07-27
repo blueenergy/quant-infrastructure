@@ -27,8 +27,6 @@ spec:
       labels:
         app: quant-researcher
     spec:
-      imagePullSecrets:
-        - name: artifactory-cred
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

@@ -150,10 +150,10 @@ COMPOSE_PROFILES=
    its immutable tag from `apps/versions.env` (`QUANT_SCORER_IMAGE_TAG`):
 
 ```bash
-# Needs Secret quant-secrets (MONGO_URI/MONGO_DB) and imagePullSecret
-# artifactory-cred for Espoo prime-local (HTTPS).
+# Needs Secret quant-secrets (MONGO_URI/MONGO_DB).
+# The default ACR repository currently permits anonymous image pulls.
 # apps/.env:
-# QUANT_SCORER_IMAGE_REPOSITORY=<registry>/<path>/quant-scorer
+# QUANT_SCORER_IMAGE_REPOSITORY=crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer
 K8S_NAMESPACE=aipoc \
   k8s/quant-finance-stack/deploy-quant-researcher.sh
 ```
