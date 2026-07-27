@@ -6,7 +6,7 @@
 #
 # Namespace and image are rendered by the deploy helper:
 #
-#   K8S_NAMESPACE=aipoc ../deploy-quant-researcher.sh
+#   K8S_NAMESPACE=aipoc ../deploy-quant-role.sh researcher
 #
 # Reports use emptyDir by default so clusters without working dynamic
 # provisioning can still schedule. Re-add a PVC when StorageClass works.
@@ -36,7 +36,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: researcher
-          # Placeholder replaced by ../deploy-quant-researcher.sh.
+          # Placeholder replaced by ../deploy-quant-role.sh researcher.
           # Repository comes from QUANT_SCORER_IMAGE_REPOSITORY; tag comes
           # from apps/versions.env (QUANT_SCORER_IMAGE_TAG).
           image: quant-scorer:latest

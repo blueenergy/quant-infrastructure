@@ -38,14 +38,18 @@ quant-finance-stack/
 `quant-researcher.yaml` 默认不纳入整栈 kustomize。启用前请在 Compose 主机设置
 `PORTFOLIO_RESEARCH_RUNTIME=external_k8s`，避免本机 `research-local` profile
 与集群 worker 同时抢同一 Mongo 队列。使用
-`deploy-quant-researcher.sh` 单独部署：镜像仓库由
+`deploy-quant-role.sh researcher` 单独部署：镜像仓库由
 `QUANT_SCORER_IMAGE_REPOSITORY` 提供，tag 读取
 `apps/versions.env` 的 `QUANT_SCORER_IMAGE_TAG`。
 
 `quant-scorer.yaml` 同样不纳入整栈 kustomize。将
 `QUANT_SCORER_RUNTIME=external_k8s` 并停止 Compose scorer 后，使用
-`deploy-quant-scorer.sh` 部署到目标 namespace。该 Deployment 固定单副本并
+`deploy-quant-role.sh scorer` 部署到目标 namespace。该 Deployment 固定单副本并
 使用 `Recreate` 策略，避免升级期间出现两个 19:00 定时评分器。
+
+两个角色共用 `deploy-quant-role.sh` 的镜像解析、校验、渲染、apply 与
+rollout 逻辑。升级默认保留线上已有副本数；researcher 可用
+`K8S_REPLICAS=<N>` 显式扩缩容，scorer 为避免重复调度只允许 1 个副本。
 
 ## K3s 快速步骤
 

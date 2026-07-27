@@ -131,12 +131,12 @@ Deploy the singleton K8s scheduler from an FCI-connected host:
 
 ```bash
 K8S_NAMESPACE=aipoc \
-  k8s/quant-finance-stack/deploy-quant-scorer.sh
+  k8s/quant-finance-stack/deploy-quant-role.sh scorer
 ```
 
 The helper resolves the ACR repository from `apps/.env` and the immutable tag
 from `apps/versions.env`. The default Pod uses one replica, a `Recreate`
-strategy, `MAX_WORKERS=8`, and an 8-CPU/12-GiB limit. Do not scale replicas
+strategy, `MAX_WORKERS=12`, and a 12-CPU/16-GiB limit. Do not scale replicas
 without first adding a distributed scoring lock or explicit work sharding.
 
 ## Portfolio research runtime
@@ -190,7 +190,7 @@ COMPOSE_PROFILES=scorer-local
 # apps/.env:
 # QUANT_SCORER_IMAGE_REPOSITORY=crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer
 K8S_NAMESPACE=aipoc \
-  k8s/quant-finance-stack/deploy-quant-researcher.sh
+  k8s/quant-finance-stack/deploy-quant-role.sh researcher
 ```
 
    Use `--render` to inspect the resolved manifest without changing the

@@ -4,7 +4,7 @@
 #
 # Namespace and image are supplied by the deploy helper:
 #
-#   K8S_NAMESPACE=aipoc ../deploy-quant-scorer.sh
+#   K8S_NAMESPACE=aipoc ../deploy-quant-role.sh scorer
 #
 apiVersion: apps/v1
 kind: Deployment
@@ -34,7 +34,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: scorer
-          # Placeholder replaced by ../deploy-quant-scorer.sh.
+          # Placeholder replaced by ../deploy-quant-role.sh scorer.
           image: quant-scorer:latest
           imagePullPolicy: IfNotPresent
           command: ["/app/start.scorer.sh"]
@@ -60,7 +60,7 @@ spec:
               value: quant_data
             # score_util.py uses this ThreadPool size for the daily run.
             - name: MAX_WORKERS
-              value: "8"
+              value: "12"
             - name: MONGO_URL
               valueFrom:
                 secretKeyRef:
@@ -73,11 +73,11 @@ spec:
                   key: MONGO_DB
           resources:
             requests:
-              cpu: "2"
-              memory: "4Gi"
+              cpu: "4"
+              memory: "8Gi"
             limits:
-              cpu: "8"
-              memory: "12Gi"
+              cpu: "12"
+              memory: "16Gi"
           volumeMounts:
             - name: logs
               mountPath: /app/logs
