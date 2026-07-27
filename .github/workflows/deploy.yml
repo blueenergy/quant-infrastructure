@@ -55,6 +55,11 @@ jobs:
           touch .env
           docker compose --env-file versions.env config >/dev/null
           echo "compose config OK"
+      - name: Check Argo CD overlay image tags
+        working-directory: k8s/quant-finance-stack
+        run: |
+          chmod +x scripts/sync-overlay-images.sh
+          ./scripts/sync-overlay-images.sh --check
 
   deploy:
     name: Deploy to production

@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: quant-aipoc-workers
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/blueenergy/quant-infrastructure.git
+    targetRevision: main
+    path: k8s/quant-finance-stack/overlays/aipoc-workers
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: aipoc
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

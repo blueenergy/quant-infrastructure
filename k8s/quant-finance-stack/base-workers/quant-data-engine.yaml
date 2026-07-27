@@ -77,13 +77,25 @@ spec:
                   key: SECONDARY_MONGO_DB
                   optional: true
             - name: INTRADAY_T0_TRIGGER_URL
-              value: "__INTRADAY_T0_TRIGGER_URL__"
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: INTRADAY_T0_TRIGGER_URL
             - name: INTRADAY_T0_TRIGGER_KEY
-              value: "__INTRADAY_T0_TRIGGER_KEY__"
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: INTRADAY_T0_TRIGGER_KEY
             - name: MARKET_INSIGHT_TRIGGER_URL
-              value: "__MARKET_INSIGHT_TRIGGER_URL__"
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MARKET_INSIGHT_TRIGGER_URL
             - name: MARKET_INSIGHT_TRIGGER_KEY
-              value: "__MARKET_INSIGHT_TRIGGER_KEY__"
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MARKET_INSIGHT_TRIGGER_KEY
           resources:
             requests:
               cpu: "500m"

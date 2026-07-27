@@ -10,11 +10,8 @@ resources:
   - quant-api.yaml
   - quant-strategy-manager.yaml
   - quant-assistant.yaml
-  - quant-analyzer.yaml
-  - quant-data-engine.yaml
-  - backtest-worker.yaml
-  # quant-scorer and quant-researcher are deployed separately by
-  # ../deploy-quant-role.sh, which resolves repository + versions.env tag.
+  # Workers live in ../base-workers (Argo CD / deploy-quant-role.sh).
+  - ../base-workers
   - web.yaml
   # Uncomment when DNS / TLS ready:
   # - ingress-web.yaml

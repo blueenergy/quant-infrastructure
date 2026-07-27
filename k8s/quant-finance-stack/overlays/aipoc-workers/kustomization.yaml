@@ -1,0 +1,33 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# GitOps overlay for NKS aipoc worker Deployments (Argo CD).
+# Image tags are generated from apps/versions.env — run:
+#   k8s/quant-finance-stack/scripts/sync-overlay-images.sh
+namespace: aipoc
+
+resources:
+  - ../../base-workers
+
+patches:
+  - path: researcher-replicas-patch.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: quant-finance
+      app.kubernetes.io/managed-by: argocd
+    includeSelectors: false
+
+images:
+  - name: quant-scorer:latest
+    newName: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer
+    newTag: sha-c79549e
+  - name: quant-data-engine:latest
+    newName: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-data-engine
+    newTag: sha-d0e0f04
+  - name: backtest-worker:latest
+    newName: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/backtest-worker
+    newTag: sha-5ab5ce0
+  - name: quant-analyzer:latest
+    newName: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-analyzer
+    newTag: sha-9b0049b

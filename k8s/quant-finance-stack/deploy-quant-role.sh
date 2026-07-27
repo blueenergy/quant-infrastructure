@@ -149,7 +149,7 @@ case "$ROLE" in
     ;;
 esac
 
-MANIFEST="$SCRIPT_DIR/base/$MANIFEST_NAME"
+MANIFEST="$SCRIPT_DIR/base-workers/$MANIFEST_NAME"
 
 if [ ! -f "$VERSIONS_FILE" ]; then
   echo "ERROR: versions file not found: $VERSIONS_FILE" >&2
@@ -242,17 +242,6 @@ render_manifest() {
     }
   ' "$MANIFEST")" || return 1
 
-  if [ "$ROLE" = "data-engine" ]; then
-    local api_host trigger_key
-    api_host="$(env_file_get K8S_QUANT_API_HOST "$DEPLOY_ENV_FILE")"
-    trigger_key="$(env_file_get HERMES_QUANT_INTERNAL_KEY "$DEPLOY_ENV_FILE")"
-    if [ -n "$api_host" ] && [ -n "$trigger_key" ]; then
-      out="${out//__INTRADAY_T0_TRIGGER_URL__/http://${api_host}:3001/api/intraday-t0/signals/generate-all}"
-      out="${out//__MARKET_INSIGHT_TRIGGER_URL__/http://${api_host}:3001/api/market-insights/generate-internal}"
-      out="${out//__INTRADAY_T0_TRIGGER_KEY__/$trigger_key}"
-      out="${out//__MARKET_INSIGHT_TRIGGER_KEY__/$trigger_key}"
-    fi
-  fi
   printf '%s\n' "$out"
 }
 
