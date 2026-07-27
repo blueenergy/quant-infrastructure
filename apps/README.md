@@ -162,6 +162,18 @@ K8S_NAMESPACE=aipoc \
    cluster. Do not apply `base/quant-researcher.yaml` directly: its image is
    intentionally a neutral placeholder.
 
+4. Ensure `quant-secrets` `MONGO_URI` reaches the same DB as Compose.
+   With `PORTFOLIO_RESEARCH_RUNTIME=external_k8s`, artifacts upload to S3 bucket
+   **`aipoc`** (see `PORTFOLIO_RESEARCH_S3_*` in `secret.env.example` and
+   `apps/env/common.env.example`). Compose **quant-api** needs the same S3 read
+   credentials so the UI can open HTML/combo detail without shared PVC.
+
+   Create the bucket once on a host that reaches eecloud S3:
+
+```bash
+s3cmd -c deployment/credentials/s3cfg mb s3://aipoc
+```
+
 **Tuning**
 
 - Single job sweep parallelism: `PORTFOLIO_RESEARCH_SWEEP_WORKERS` (Compose:
