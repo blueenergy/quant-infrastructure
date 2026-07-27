@@ -1,0 +1,45 @@
+# Argo CD UI via nginx Ingress (NKS1005 pattern).
+#
+# 1. Copy and set ARGOCD_HOST + whitelist CIDRs + TLS secret.
+# 2. Patch argocd-cm with the public URL (see argocd-cm-url-patch.example.yaml).
+# 3. kubectl apply -f ingress-argocd.yaml
+#
+# DNS: point ARGOCD_HOST to ingress VIPs (same as Grafana/Rancher), e.g.
+#   argocd.prod.wingrnc.es-ea-os-chn-1005.k8s.dyn.nesc.nokia.net -> 10.183.48.255
+#
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server
+  namespace: argocd
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    # Access control: corporate / lab networks only (edit CIDRs).
+    nginx.ingress.kubernetes.io/whitelist-source-range: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+    # UI + CLI sync can be slow on large apps
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    # Optional extra gate (create secret argocd-ingress-basic-auth first):
+    # nginx.ingress.kubernetes.io/auth-type: basic
+    # nginx.ingress.kubernetes.io/auth-secret: argocd-ingress-basic-auth
+    # nginx.ingress.kubernetes.io/auth-realm: "Argo CD"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - argocd.prod.wingrnc.es-ea-os-chn-1005.k8s.dyn.nesc.nokia.net
+      secretName: argocd-server-tls
+  rules:
+    - host: argocd.prod.wingrnc.es-ea-os-chn-1005.k8s.dyn.nesc.nokia.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  name: https

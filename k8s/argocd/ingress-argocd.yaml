@@ -1,0 +1,40 @@
+# Argo CD UI — NKS1005 nginx Ingress (no IP whitelist).
+# TLS: reuse wildcard Secret "tls" (copy from monitoring namespace before apply).
+#
+#   kubectl -n monitoring get secret tls -o yaml \
+#     | sed 's/namespace: monitoring/namespace: argocd/' \
+#     | kubectl apply -f -
+#   kubectl apply -f ingress-argocd.yaml
+#   kubectl apply -f argocd-cm-url.yaml
+#
+# DNS: argocd.prod.wingrnc.es-ea-os-chn-1005.k8s.dyn.nesc.nokia.net -> ingress VIP
+#      (10.183.48.255 / 10.183.49.106 / 10.183.50.117)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server
+  namespace: argocd
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - argocd.prod.wingrnc.es-ea-os-chn-1005.k8s.dyn.nesc.nokia.net
+      secretName: tls
+  rules:
+    - host: argocd.prod.wingrnc.es-ea-os-chn-1005.k8s.dyn.nesc.nokia.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  name: http

@@ -1,0 +1,15 @@
+# Tell Argo CD its external URL (required for SSO links, CLI login, callbacks).
+# Apply after replacing the host:
+#
+#   sed 's/ARGOCD_HOST/argocd.prod....nokia.net/' argocd-cm-url-patch.example.yaml | kubectl apply -f -
+#
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  url: https://ARGOCD_HOST

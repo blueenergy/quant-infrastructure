@@ -1,0 +1,27 @@
+# TLS for Argo CD Ingress host (optional if you copy an existing wildcard Secret).
+#
+# This cluster uses cert-manager Issuer "rancher" in cattle-system (see Rancher Ingress).
+# If your platform team provisions DNS under *.prod.wingrnc...nokia.net, ask whether
+# you should reuse Secret "tls" (as monitoring/grafana does) or create a Certificate.
+#
+# Example Certificate (adjust issuerRef to what your cluster allows):
+#
+# apiVersion: cert-manager.io/v1
+# kind: Certificate
+# metadata:
+#   name: argocd-server-tls
+#   namespace: argocd
+# spec:
+#   secretName: argocd-server-tls
+#   dnsNames:
+#     - argocd.prod.wingrnc.es-ea-os-chn-1005.k8s.dyn.nesc.nokia.net
+#   issuerRef:
+#     name: rancher
+#     kind: Issuer
+#     group: cert-manager.io
+#
+# Reuse monitoring wildcard (only if cert covers your hostname):
+#   kubectl -n monitoring get secret tls -o yaml \
+#     | sed 's/namespace: monitoring/namespace: argocd/' \
+#     | kubectl apply -f -
+#   # Then set ingress-argocd secretName to tls
