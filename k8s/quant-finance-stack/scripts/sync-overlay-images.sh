@@ -35,6 +35,9 @@ env_file_get() {
 scorer_repo="$(env_file_get QUANT_SCORER_IMAGE_REPOSITORY "$DEPLOY_ENV")"
 scorer_repo="${scorer_repo:-$(env_file_get QUANT_SCORER_IMAGE_REPOSITORY "$COMMON_ENV")}"
 scorer_repo="${scorer_repo:-$(env_file_get QUANT_SCORER_IMAGE_REPOSITORY "$INFRA_ROOT/apps/env/quant-scorer.env.example")}"
+# .env.example is the only committed file carrying the key, so --check works on
+# a bare CI checkout where apps/.env and env/common.env are absent.
+scorer_repo="${scorer_repo:-$(env_file_get QUANT_SCORER_IMAGE_REPOSITORY "$INFRA_ROOT/apps/.env.example")}"
 if [ -z "$scorer_repo" ]; then
   echo "ERROR: QUANT_SCORER_IMAGE_REPOSITORY not found" >&2
   exit 1
