@@ -59,6 +59,10 @@ spec:
           env:
             - name: TZ
               value: Asia/Shanghai
+            # uid 1000 has no passwd entry, so HOME would default to /, which
+            # it cannot write. Tushare persists its token at $HOME/tk.csv.
+            - name: HOME
+              value: /tmp
             - name: FACTOR_BACKTEST_RUNTIME
               value: external_k8s
             - name: FACTOR_BACKTEST_LOOP_INTERVAL_SECONDS

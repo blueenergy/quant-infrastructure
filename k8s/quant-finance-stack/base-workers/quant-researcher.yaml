@@ -55,6 +55,10 @@ spec:
             - secretRef:
                 name: quant-secrets
           env:
+            # uid 1000 has no passwd entry, so HOME would default to /, which
+            # it cannot write. Tushare persists its token at $HOME/tk.csv.
+            - name: HOME
+              value: /tmp
             - name: TZ
               value: Asia/Shanghai
             - name: PORTFOLIO_RESEARCH_RUNTIME
