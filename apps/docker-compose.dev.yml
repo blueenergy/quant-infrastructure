@@ -392,6 +392,52 @@ services:
         max-size: "50m"
         max-file: "3"
 
+  # 因子回测 (Alpha158 筛选 loop)
+  # 独立于 quant-researcher: 单个因子任务要跑 30~75 分钟并占用约 5GB,
+  # 混在同一个 loop 里会把排在后面的组合研究任务全部堵死。
+  quant-factor-researcher:
+    build:
+      context: ../../stock-scoring-system
+      dockerfile: Dockerfile
+    container_name: quant-factor-researcher
+    profiles: [ "research-local" ]
+    command: [ "/app/start.factor-researcher.sh" ]
+    env_file:
+      - path: ../../stock-scoring-system/.env
+        required: false
+    environment:
+      - MONGO_URI=${DOCKER_MONGO_URI:-mongodb://quant-mongodb:27017/}
+      - MONGO_DB=${MONGO_DB}
+      - TUSHARE_TOKEN=${TUSHARE_TOKEN}
+      - TZ=Asia/Shanghai
+      # 报告只有 200KB 上下, 直接内联存 Mongo, 所以不需要报告卷。
+      - FACTOR_BACKTEST_LOOP_LIMIT=${FACTOR_BACKTEST_LOOP_LIMIT:-1}
+      # 诊断阶段单次调用要跑几十分钟, 阈值必须远高于健康任务的表现。
+      - FACTOR_BACKTEST_STALE_MINUTES=${FACTOR_BACKTEST_STALE_MINUTES:-120}
+      # 闸门是估算值, 所以刻意低于下面的 8g 上限, 留出估算误差的余量。
+      - FACTOR_BACKTEST_MEMORY_BUDGET_GB=${FACTOR_BACKTEST_MEMORY_BUDGET_GB:-6}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    volumes:
+      - ../../stock-scoring-system/logs/factor-researcher:/app/logs
+    networks:
+      - quant-network
+    deploy:
+      resources:
+        limits:
+          cpus: "${FACTOR_RESEARCHER_CPU_LIMIT:-2}"
+          # 实测 CSI1000 x 158 因子峰值 RSS 4.2GB。
+          memory: "${FACTOR_RESEARCHER_MEM_LIMIT:-8g}"
+        reservations:
+          cpus: "0"
+          memory: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
   # 组合计划生成 + paper-trading (计划生成 loop + 相关定时任务)
   quant-portfolio:
     build:
