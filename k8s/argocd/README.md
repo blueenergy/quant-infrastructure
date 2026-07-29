@@ -15,7 +15,9 @@ git add k8s/quant-finance-stack/overlays/aipoc-workers/kustomization.yaml
 
 Argo CD auto-syncs when that file changes on `main` (same commit as `versions.env` is ideal).
 
-CI can enforce consistency:
+You normally do not have to: the `Deploy app stack` workflow regenerates the overlay
+from `apps/versions.env` and commits it on every deploy, which is how an app CI tag
+bump reaches Argo CD. Run the check locally to see drift before pushing:
 
 ```bash
 k8s/quant-finance-stack/scripts/sync-overlay-images.sh --check

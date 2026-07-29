@@ -8,6 +8,12 @@ name: Deploy app stack
 # only do continuous DELIVERY (build + push image), then bump versions.env and
 # notify this workflow; deployment happens here.
 #
+# Two delivery paths hang off versions.env: the Compose services roll out over
+# SSH in the deploy job, and the K8s workers roll out through Argo CD, which
+# watches the kustomize overlay. The sync-overlay job regenerates that overlay
+# from versions.env and commits it, so an app CI tag bump reaches both without
+# a manual step.
+#
 # Triggers:
 #   - repository_dispatch (event_type: deploy): sent by app repos after they
 #     bump versions.env. client_payload.services = space/comma separated list.
@@ -30,8 +36,9 @@ on:
         required: false
         default: ""
   # NOTE: no push trigger — validate runs as part of every deploy (see the
-  # validate job above). To validate a manual infra edit without deploying,
-  # use workflow_dispatch with a blank services input.
+  # validate job above), and it also keeps the sync-overlay job's own commit
+  # from retriggering this workflow. To validate a manual infra edit without
+  # deploying, use workflow_dispatch with a blank services input.
 
 permissions:
   contents: read
@@ -55,17 +62,65 @@ jobs:
           touch .env
           docker compose --env-file versions.env config >/dev/null
           echo "compose config OK"
-      - name: Check Argo CD overlay image tags
-        working-directory: k8s/quant-finance-stack
+
+  sync-overlay:
+    name: Sync Argo CD overlay image tags
+    needs: [validate]
+    runs-on: ubuntu-latest
+    # The only job that writes to the repo; everything else stays read-only.
+    permissions:
+      contents: write
+    concurrency:
+      group: overlay-sync
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Regenerate overlay from versions.env and commit any drift
         run: |
-          chmod +x scripts/sync-overlay-images.sh
-          ./scripts/sync-overlay-images.sh --check
+          # App CIs bump apps/versions.env but cannot regenerate the overlay,
+          # so it used to arrive stale and fail the deploy. Sync it here
+          # instead: Argo CD auto-syncs the K8s workers off this file, and the
+          # SSH deploy job below pulls the commit for the Compose services.
+          #
+          # Pushing to main cannot retrigger this workflow — it has no push
+          # trigger (see `on:` above).
+          OVERLAY=k8s/quant-finance-stack/overlays/aipoc-workers/kustomization.yaml
+          chmod +x k8s/quant-finance-stack/scripts/sync-overlay-images.sh
+          git config user.name "ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          for attempt in 1 2 3 4 5; do
+            git fetch --quiet origin main
+            git reset --hard --quiet origin/main
+            # Regenerating after the reset means a concurrent versions.env bump
+            # is picked up rather than conflicted with.
+            ./k8s/quant-finance-stack/scripts/sync-overlay-images.sh
+            if git diff --quiet -- "$OVERLAY"; then
+              echo "Overlay already matches apps/versions.env; nothing to commit."
+              exit 0
+            fi
+            # Stage only the image tags. The replica patch the script also
+            # writes comes from K8S_RESEARCHER_REPLICAS, which a CI checkout
+            # does not have, so committing it here would reset it to the
+            # default.
+            git add "$OVERLAY"
+            git commit -m "deploy(overlay): sync Argo CD image tags to versions.env"
+            if git push origin main; then
+              echo "Pushed overlay sync."
+              exit 0
+            fi
+            echo "Push raced (attempt ${attempt}); retrying..."
+            sleep $((attempt * 5))
+          done
+          echo "Failed to push overlay sync after retries." >&2
+          exit 1
 
   deploy:
     name: Deploy to production
     # Only the event types that should actually roll out.
     if: github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch'
-    needs: [validate]
+    needs: [validate, sync-overlay]
     runs-on: ubuntu-latest
     concurrency:
       group: prod-deploy

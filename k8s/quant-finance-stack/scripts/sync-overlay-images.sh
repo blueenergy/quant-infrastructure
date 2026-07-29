@@ -3,7 +3,10 @@
 #
 # Usage:
 #   sync-overlay-images.sh          # rewrite kustomization.yaml images
-#   sync-overlay-images.sh --check  # exit 1 if out of date (for CI)
+#   sync-overlay-images.sh --check  # exit 1 if out of date, without writing
+#
+# The deploy workflow runs the write mode and commits the result, so --check is
+# for spotting drift locally before pushing.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
