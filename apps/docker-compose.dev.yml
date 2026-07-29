@@ -400,7 +400,7 @@ services:
       context: ../../stock-scoring-system
       dockerfile: Dockerfile
     container_name: quant-factor-researcher
-    profiles: [ "research-local" ]
+    profiles: [ "factor-research-local" ]
     command: [ "/app/start.factor-researcher.sh" ]
     env_file:
       - path: ../../stock-scoring-system/.env

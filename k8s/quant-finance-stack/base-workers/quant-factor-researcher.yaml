@@ -1,0 +1,115 @@
+# Standalone Alpha158 factor backtest worker (external_k8s).
+# Same stock-scoring-system image as Compose quant-factor-researcher.
+# Consumes quant_trading.factor_backtest_jobs via MONGO_URI in Secret
+# "quant-secrets". Do not also run Compose profile research-local against
+# the same Mongo queue (set FACTOR_BACKTEST_RUNTIME=external_k8s).
+#
+# Namespace and image are rendered by the deploy helper:
+#
+#   K8S_NAMESPACE=aipoc ../deploy-quant-role.sh factor-researcher
+#
+# Scalable: claiming is atomic, so replicas never share a job. Each replica
+# needs its own memory though, since one job holds several GB for the whole
+# run, and the diagnostics stage is single threaded so it also wants its own
+# core. Reports are stored inline in Mongo, so no volume is needed for them.
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quant-factor-researcher
+  labels:
+    app: quant-factor-researcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quant-factor-researcher
+  template:
+    metadata:
+      labels:
+        app: quant-factor-researcher
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: factor-researcher
+          # Placeholder replaced by ../deploy-quant-role.sh factor-researcher.
+          # Repository comes from QUANT_SCORER_IMAGE_REPOSITORY; tag comes
+          # from apps/versions.env (QUANT_SCORER_IMAGE_TAG).
+          image: quant-scorer:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/app/start.factor-researcher.sh"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          envFrom:
+            - secretRef:
+                name: quant-secrets
+          env:
+            - name: TZ
+              value: Asia/Shanghai
+            - name: FACTOR_BACKTEST_RUNTIME
+              value: external_k8s
+            - name: FACTOR_BACKTEST_LOOP_INTERVAL_SECONDS
+              value: "5"
+            # One job per iteration: two in a row would stack their memory.
+            - name: FACTOR_BACKTEST_LOOP_LIMIT
+              value: "1"
+            # Well above any healthy job: the diagnostics stage alone has been
+            # measured near 50 minutes inside a single call. A restarted pod
+            # reclaims its own job by worker id, so this is only the backstop
+            # for a pod that never comes back.
+            - name: FACTOR_BACKTEST_STALE_MINUTES
+              value: "120"
+            # Under the 24Gi limit below, with room for the estimate to be
+            # wrong. Higher than Compose because the pod ceiling is higher:
+            # this is what lets the full 158-factor set run over a long
+            # history here while the same request is refused on a small host.
+            - name: FACTOR_BACKTEST_MEMORY_BUDGET_GB
+              value: "20"
+            # Pod name, so replicas get distinct ids and a restarted pod can
+            # tell its own orphaned job apart from a live sibling's.
+            - name: FACTOR_BACKTEST_WORKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MONGO_URI
+            - name: MONGO_DB
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MONGO_DB
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+          resources:
+            requests:
+              # A job really does hold this much, so requesting less would let
+              # the scheduler pack a node it cannot honour and OOM kill later.
+              cpu: "500m"
+              memory: "6Gi"
+            limits:
+              cpu: "2"
+              memory: "24Gi"
+      volumes:
+        - name: logs
+          emptyDir: {}

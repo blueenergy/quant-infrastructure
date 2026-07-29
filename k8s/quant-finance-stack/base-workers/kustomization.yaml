@@ -5,6 +5,7 @@ kind: Kustomization
 resources:
   - quant-scorer.yaml
   - quant-researcher.yaml
+  - quant-factor-researcher.yaml
   - quant-portfolio.yaml
   - quant-data-engine.yaml
   - backtest-worker.yaml

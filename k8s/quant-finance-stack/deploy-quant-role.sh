@@ -4,7 +4,8 @@
 # Usage:
 #   deploy-quant-role.sh <role> [--render]
 #
-# Roles: scorer | researcher | portfolio | data-engine | backtest | analyzer
+# Roles: scorer | researcher | factor-researcher | portfolio | data-engine |
+#        backtest | analyzer
 #
 # K8S_REPLICAS overrides replica count where allowed (scorer/portfolio/data-engine/
 # backtest/analyzer must stay at 1 unless noted).
@@ -21,6 +22,9 @@ Usage:
 Roles:
   scorer        Daily stock-scoring scheduler (singleton).
   researcher    Portfolio-research queue worker (scalable).
+  factor-researcher
+                Alpha158 factor backtest queue worker (scalable; one job
+                holds several GB, so give each replica its own memory).
   portfolio     Plan generation + paper-trading cron (singleton).
   data-engine   Market data sync + cron (singleton).
   backtest      Backtest queue + screening (singleton).
@@ -37,7 +41,7 @@ QUANT_SCORER_IMAGE_REPOSITORY parent path (wukongquant/*) or per-role overrides:
   QUANT_ANALYZER_IMAGE_REPOSITORY
 
 Runtime gates (apps/env/common.env or apps/.env for dev):
-  QUANT_SCORER_RUNTIME, PORTFOLIO_RESEARCH_RUNTIME,
+  QUANT_SCORER_RUNTIME, PORTFOLIO_RESEARCH_RUNTIME, FACTOR_BACKTEST_RUNTIME,
   QUANT_PORTFOLIO_RUNTIME, QUANT_DATA_ENGINE_RUNTIME,
   BACKTEST_WORKER_RUNTIME, QUANT_ANALYZER_RUNTIME
   Each must be external_k8s before deploy (except --render).
@@ -47,7 +51,7 @@ EOF
 }
 
 usage() {
-  echo "Usage: $0 {scorer|researcher|portfolio|data-engine|backtest|analyzer} [--render]" >&2
+  echo "Usage: $0 {scorer|researcher|factor-researcher|portfolio|data-engine|backtest|analyzer} [--render]" >&2
   echo "Run '$0 --help' for details." >&2
   exit 2
 }
@@ -113,6 +117,13 @@ case "$ROLE" in
     DEPLOYMENT="quant-researcher"
     MANIFEST_NAME="quant-researcher.yaml"
     RUNTIME_KEY="PORTFOLIO_RESEARCH_RUNTIME"
+    IMAGE_PLACEHOLDER="quant-scorer:latest"
+    TAG_KEY="QUANT_SCORER_IMAGE_TAG"
+  ;;
+  factor-researcher)
+    DEPLOYMENT="quant-factor-researcher"
+    MANIFEST_NAME="quant-factor-researcher.yaml"
+    RUNTIME_KEY="FACTOR_BACKTEST_RUNTIME"
     IMAGE_PLACEHOLDER="quant-scorer:latest"
     TAG_KEY="QUANT_SCORER_IMAGE_TAG"
   ;;

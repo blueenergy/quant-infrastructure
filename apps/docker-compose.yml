@@ -245,6 +245,54 @@ services:
         max-size: "50m"
         max-file: "3"
 
+  # Alpha158 factor backtest queue worker from the stock-scoring-system image.
+  # Kept separate from quant-researcher because a single factor job runs
+  # 30-75 minutes and peaks near 5GB: sharing that loop would block every
+  # research job queued behind it. Set FACTOR_BACKTEST_RUNTIME=external_k8s
+  # and stop this profile before running the K8s Deployment against the same
+  # queue.
+  quant-factor-researcher:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer:${QUANT_SCORER_IMAGE_TAG:-latest}
+    container_name: quant-factor-researcher
+    profiles: ["factor-research-local"]
+    restart: unless-stopped
+    command: ["/app/start.factor-researcher.sh"]
+    env_file:
+      - env/common.env
+      - env/quant-scorer.env
+    environment:
+      - TZ=Asia/Shanghai
+      # Reports are ~200KB and stored inline in Mongo, so there is no report volume.
+      - FACTOR_BACKTEST_LOOP_LIMIT=${FACTOR_BACKTEST_LOOP_LIMIT:-1}
+      # The diagnostics stage runs tens of minutes inside one call, so the
+      # stale threshold has to sit well above any healthy job.
+      - FACTOR_BACKTEST_STALE_MINUTES=${FACTOR_BACKTEST_STALE_MINUTES:-120}
+      # Deliberately under the memory limit below: the guard works off an
+      # estimate, so it needs room for the estimate to be wrong.
+      - FACTOR_BACKTEST_MEMORY_BUDGET_GB=${FACTOR_BACKTEST_MEMORY_BUDGET_GB:-6}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./logs/quant-factor-researcher:/app/logs
+    networks:
+      - quant-net
+    # Tunable per environment via common.env:
+    #   FACTOR_RESEARCHER_CPU_LIMIT, FACTOR_RESEARCHER_MEM_LIMIT
+    # A CSI1000 x 158-factor run peaked at 4.2GB RSS.
+    deploy:
+      resources:
+        limits:
+          cpus: "${FACTOR_RESEARCHER_CPU_LIMIT:-2}"
+          memory: "${FACTOR_RESEARCHER_MEM_LIMIT:-8g}"
+        reservations:
+          cpus: "0"
+          memory: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
   # [MIGRATED] Portfolio planning and paper-trading role from the
   # stock-scoring-system image. It owns plan-generation polling and paper
   # execution/mark-to-market cron jobs.

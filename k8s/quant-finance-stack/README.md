@@ -31,6 +31,7 @@ quant-finance-stack/
     ├── backtest-worker.yaml
     ├── quant-scorer.yaml
     ├── quant-researcher.yaml # 可选；external_k8s 时启用（见 apps/README）
+    ├── quant-factor-researcher.yaml # 可选；Alpha158 因子回测队列
     ├── web.yaml
     └── ingress-web.yaml      # 可选；默认在 kustomization 中注释掉
 ```
@@ -42,13 +43,22 @@ quant-finance-stack/
 `QUANT_SCORER_IMAGE_REPOSITORY` 提供，tag 读取
 `apps/versions.env` 的 `QUANT_SCORER_IMAGE_TAG`。
 
+`quant-factor-researcher.yaml` 同理，把 `FACTOR_BACKTEST_RUNTIME=external_k8s`
+并停掉 Compose 的 `factor-research-local` profile 后，用
+`deploy-quant-role.sh factor-researcher` 部署。它与 researcher 共用同一镜像，
+但读的是 `quant_trading.factor_backtest_jobs`，与组合研究队列互不影响。单个因子
+任务实测峰值 4.2GB 且诊断阶段是单线程，所以 Pod 申请 6Gi / 上限 24Gi，扩副本时
+每个副本都要按这个量算内存和 CPU。清单里把
+`FACTOR_BACKTEST_MEMORY_BUDGET_GB` 设为 20（Compose 默认 6），这样全 158 因子
+跑长历史在集群上放行、在小主机上仍被拒绝。
+
 `quant-scorer.yaml` 同样不纳入整栈 kustomize。将
 `QUANT_SCORER_RUNTIME=external_k8s` 并停止 Compose scorer 后，使用
 `deploy-quant-role.sh scorer` 部署到目标 namespace。该 Deployment 固定单副本并
 使用 `Recreate` 策略，避免升级期间出现两个 19:00 定时评分器。
 
 两个角色共用 `deploy-quant-role.sh` 的镜像解析、校验、渲染、apply 与
-rollout 逻辑。升级默认保留线上已有副本数；researcher 可用
+rollout 逻辑。升级默认保留线上已有副本数；researcher 与 factor-researcher 可用
 `K8S_REPLICAS=<N>` 显式扩缩容，scorer 为避免重复调度只允许 1 个副本。
 
 ## K3s 快速步骤
@@ -107,6 +117,7 @@ rollout 逻辑。升级默认保留线上已有副本数；researcher 可用
 | backtest-worker           | （同上）                           |      |
 | quant-scorer              | （同上）                           |      |
 | quant-researcher          | （同上；草稿 YAML，默认未纳入 kustomize） |      |
+| quant-factor-researcher   | （同上；因子回测队列 worker）      |      |
 | web                       | `quant-web`                       | 80   |
 
 集群内 DNS 示例：`http://quant-api.quant-finance.svc.cluster.local:3001`（与 `configmap.yaml` 中 `INTERNAL_API_BASE` 一致）。
