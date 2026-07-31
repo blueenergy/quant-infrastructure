@@ -69,7 +69,10 @@ spec:
               value: /app/reports/portfolio-research/checkpoints
             - name: PORTFOLIO_RESEARCH_PANEL_CACHE_DIR
               value: /app/reports/portfolio-research/panel-cache
-            # Outer sweep ProcessPool size per job (10Gi pod limit; scale replicas for more jobs).
+            # Outer sweep ProcessPool size per job; scale replicas for more jobs.
+            # Each worker holds its own copy of the score panel, so peak memory
+            # scales with workers x universe size. Six workers on a ~1000-name
+            # universe needs the 48Gi limit below.
             - name: PORTFOLIO_RESEARCH_SWEEP_WORKERS
               value: "6"
             - name: PORTFOLIO_RESEARCH_LOOP_INTERVAL_SECONDS
@@ -101,11 +104,15 @@ spec:
               mountPath: /app/logs
           resources:
             requests:
+              # Request has to reserve most of the working set, not just a floor:
+              # a 4Gi request against a 24Gi limit let the scheduler place this on
+              # nodes without real headroom, and a csi1000 sweep grew until the
+              # kubelet evicted the whole pod under node memory pressure.
               cpu: "500m"
-              memory: "4Gi"
+              memory: "24Gi"
             limits:
               cpu: "2"
-              memory: "24Gi"
+              memory: "48Gi"
       volumes:
         - name: reports
           emptyDir: {}
