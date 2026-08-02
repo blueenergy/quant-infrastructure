@@ -5,7 +5,7 @@
 #   deploy-quant-role.sh <role> [--render]
 #
 # Roles: scorer | researcher | factor-researcher | portfolio | data-engine |
-#        backtest | analyzer
+#        backtest | backtest-screening | analyzer
 #
 # K8S_REPLICAS overrides replica count where allowed (scorer/portfolio/data-engine/
 # backtest/analyzer must stay at 1 unless noted).
@@ -27,7 +27,9 @@ Roles:
                 holds several GB, so give each replica its own memory).
   portfolio     Plan generation + paper-trading cron (singleton).
   data-engine   Market data sync + cron (singleton).
-  backtest      Backtest queue + screening (singleton).
+  backtest      Backtest queue worker (scalable).
+  backtest-screening
+                Daily full-market screening scheduler (singleton).
   analyzer      Analysis task worker (default singleton).
 
 Options:
@@ -51,7 +53,7 @@ EOF
 }
 
 usage() {
-  echo "Usage: $0 {scorer|researcher|factor-researcher|portfolio|data-engine|backtest|analyzer} [--render]" >&2
+  echo "Usage: $0 {scorer|researcher|factor-researcher|portfolio|data-engine|backtest|backtest-screening|analyzer} [--render]" >&2
   echo "Run '$0 --help' for details." >&2
   exit 2
 }
@@ -148,6 +150,13 @@ case "$ROLE" in
     IMAGE_PLACEHOLDER="backtest-worker:latest"
     TAG_KEY="BACKTEST_WORKER_IMAGE_TAG"
   ;;
+  backtest-screening)
+    DEPLOYMENT="backtest-screening"
+    MANIFEST_NAME="backtest-screening.yaml"
+    RUNTIME_KEY="BACKTEST_WORKER_RUNTIME"
+    IMAGE_PLACEHOLDER="backtest-worker:latest"
+    TAG_KEY="BACKTEST_WORKER_IMAGE_TAG"
+  ;;
   analyzer)
     DEPLOYMENT="quant-analyzer"
     MANIFEST_NAME="quant-analyzer.yaml"
@@ -194,7 +203,7 @@ case "$ROLE" in
     image_repository="${image_repository:-$(env_file_get QUANT_DATA_ENGINE_IMAGE_REPOSITORY "$COMMON_ENV_FILE")}"
     image_repository="${image_repository:-${acr_parent}/quant-data-engine}"
     ;;
-  backtest)
+  backtest|backtest-screening)
     image_repository="$(env_file_get BACKTEST_WORKER_IMAGE_REPOSITORY "$DEPLOY_ENV_FILE")"
     image_repository="${image_repository:-$(env_file_get BACKTEST_WORKER_IMAGE_REPOSITORY "$COMMON_ENV_FILE")}"
     image_repository="${image_repository:-${acr_parent}/backtest-worker}"
@@ -221,7 +230,7 @@ if [ -n "$replicas" ] && [[ ! "$replicas" =~ ^[1-9][0-9]*$ ]]; then
   exit 1
 fi
 
-singleton_roles="scorer portfolio data-engine backtest analyzer"
+singleton_roles="scorer portfolio data-engine backtest-screening analyzer"
 if [[ " $singleton_roles " == *" $ROLE "* ]] && [ -n "$replicas" ] && [ "$replicas" != "1" ]; then
   echo "ERROR: $DEPLOYMENT must remain a singleton (K8S_REPLICAS=1)" >&2
   exit 1

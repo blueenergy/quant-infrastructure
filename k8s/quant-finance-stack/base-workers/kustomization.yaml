@@ -9,4 +9,5 @@ resources:
   - quant-portfolio.yaml
   - quant-data-engine.yaml
   - backtest-worker.yaml
+  - backtest-screening.yaml
   - quant-analyzer.yaml

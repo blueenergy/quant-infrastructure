@@ -357,7 +357,6 @@ services:
   # volume, log rotation, layered env.
   backtest-worker:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/backtest-worker:${BACKTEST_WORKER_IMAGE_TAG:-latest}
-    container_name: backtest-worker
     profiles: ["backtest-local"]
     restart: unless-stopped
     env_file:
@@ -365,6 +364,43 @@ services:
       - env/backtest-worker.env
     environment:
       TZ: Asia/Shanghai
+      BACKTEST_ROLE: worker
+      ENABLE_SCREENING: "false"
+      BACKTEST_LEASE_SECONDS: "300"
+      BACKTEST_HEARTBEAT_SECONDS: "30"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/backtest_worker_healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    volumes:
+      - backtest_cache:/app/cache
+    networks:
+      - quant-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  backtest-screening:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/backtest-worker:${BACKTEST_WORKER_IMAGE_TAG:-latest}
+    container_name: backtest-screening
+    profiles: ["backtest-local"]
+    restart: unless-stopped
+    env_file:
+      - env/common.env
+      - env/backtest-worker.env
+    environment:
+      TZ: Asia/Shanghai
+      BACKTEST_ROLE: screening
+      BACKTEST_WORKER_ID: backtest-screening
+      ENABLE_SCREENING: "false"
+      SCREENING_MODE: conservative
+      SCREENING_LOCK_TTL_SECONDS: "7200"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

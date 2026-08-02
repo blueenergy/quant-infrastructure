@@ -1,31 +1,28 @@
-# Queue worker for backtest_tasks (external_k8s). Horizontally scalable.
+# Singleton screening scheduler (external_k8s). Must not scale beyond one replica.
 #
-#   K8S_NAMESPACE=aipoc K8S_REPLICAS=2 ../deploy-quant-role.sh backtest
+#   K8S_NAMESPACE=aipoc ../deploy-quant-role.sh backtest-screening
 #
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backtest-worker
+  name: backtest-screening
   labels:
-    app: backtest-worker
+    app: backtest-screening
 spec:
-  replicas: 2
+  replicas: 1
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+    type: Recreate
   selector:
     matchLabels:
-      app: backtest-worker
+      app: backtest-screening
   template:
     metadata:
       labels:
-        app: backtest-worker
+        app: backtest-screening
     spec:
       terminationGracePeriodSeconds: 120
       containers:
-        - name: worker
+        - name: screening
           image: backtest-worker:latest
           imagePullPolicy: IfNotPresent
           envFrom:
@@ -35,7 +32,7 @@ spec:
             - name: TZ
               value: Asia/Shanghai
             - name: BACKTEST_ROLE
-              value: worker
+              value: screening
             - name: MONGO_URI
               valueFrom:
                 secretKeyRef:
@@ -61,14 +58,12 @@ spec:
                   fieldPath: metadata.name
             - name: ENABLE_SCREENING
               value: "false"
+            - name: SCREENING_MODE
+              value: conservative
+            - name: SCREENING_LOCK_TTL_SECONDS
+              value: "7200"
             - name: LOG_LEVEL
               value: INFO
-            - name: BACKTEST_POLL_INTERVAL
-              value: "5"
-            - name: BACKTEST_LEASE_SECONDS
-              value: "300"
-            - name: BACKTEST_HEARTBEAT_SECONDS
-              value: "30"
           resources:
             requests:
               cpu: "500m"
@@ -76,18 +71,6 @@ spec:
             limits:
               cpu: "4"
               memory: "4Gi"
-          livenessProbe:
-            exec:
-              command: ["test", "-f", "/tmp/backtest_worker_healthy"]
-            initialDelaySeconds: 45
-            periodSeconds: 30
-            timeoutSeconds: 5
-          readinessProbe:
-            exec:
-              command: ["test", "-f", "/tmp/backtest_worker_healthy"]
-            initialDelaySeconds: 20
-            periodSeconds: 15
-            timeoutSeconds: 5
           volumeMounts:
             - name: cache
               mountPath: /app/cache

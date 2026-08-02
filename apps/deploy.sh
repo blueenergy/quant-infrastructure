@@ -95,7 +95,7 @@ _service_external_k8s() {
     quant-scorer) runtime="$(_common_env_get QUANT_SCORER_RUNTIME)" ;;
     quant-portfolio) runtime="$(_common_env_get QUANT_PORTFOLIO_RUNTIME)" ;;
     quant-data-engine) runtime="$(_common_env_get QUANT_DATA_ENGINE_RUNTIME)" ;;
-    backtest-worker) runtime="$(_common_env_get BACKTEST_WORKER_RUNTIME)" ;;
+    backtest-worker|backtest-screening) runtime="$(_common_env_get BACKTEST_WORKER_RUNTIME)" ;;
     quant-analyzer) runtime="$(_common_env_get QUANT_ANALYZER_RUNTIME)" ;;
     *) return 1 ;;
   esac
@@ -111,7 +111,7 @@ _service_compose_profile() {
     quant-scorer) echo "scorer-local" ;;
     quant-portfolio) echo "portfolio-local" ;;
     quant-data-engine) echo "data-engine-local" ;;
-    backtest-worker) echo "backtest-local" ;;
+    backtest-worker|backtest-screening) echo "backtest-local" ;;
     quant-analyzer) echo "analyzer-local" ;;
     *) return 1 ;;
   esac
@@ -125,7 +125,7 @@ _runtime_env_key_for_service() {
     quant-scorer) echo "QUANT_SCORER_RUNTIME" ;;
     quant-portfolio) echo "QUANT_PORTFOLIO_RUNTIME" ;;
     quant-data-engine) echo "QUANT_DATA_ENGINE_RUNTIME" ;;
-    backtest-worker) echo "BACKTEST_WORKER_RUNTIME" ;;
+    backtest-worker|backtest-screening) echo "BACKTEST_WORKER_RUNTIME" ;;
     quant-analyzer) echo "QUANT_ANALYZER_RUNTIME" ;;
     *) return 1 ;;
   esac
@@ -146,7 +146,7 @@ filter_services_for_external_runtimes() {
 
 stop_local_services_for_external_runtimes() {
   local svc profile runtime_key any_external=0
-  for svc in quant-researcher quant-scorer quant-portfolio quant-data-engine backtest-worker quant-analyzer; do
+  for svc in quant-researcher quant-scorer quant-portfolio quant-data-engine backtest-worker backtest-screening quant-analyzer; do
     if _service_external_k8s "$svc"; then
       any_external=1
       profile="$(_service_compose_profile "$svc")"

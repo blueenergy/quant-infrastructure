@@ -246,12 +246,11 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  # 回测 Worker (轮询任务队列并执行回测)
+  # 回测 Worker (轮询任务队列并执行回测，可水平扩展)
   backtest-worker:
     build:
       context: ../..
       dockerfile: backtest-worker/Dockerfile
-    container_name: backtest-worker
     profiles: ["backtest-local"]
     env_file:
       - path: ../../backtest-worker/.env
@@ -261,15 +260,60 @@ services:
       - DB_NAME=${MONGO_DB}
       - MONGO_DB=${DATA_DB_NAME:-quant_data}
       - BACKTEST_DB_NAME=${MONGO_DB:-finance}
+      - BACKTEST_ROLE=worker
       - BACKTEST_WORKER_ID=${BACKTEST_WORKER_ID:-}
       - BACKTEST_POLL_INTERVAL=${BACKTEST_POLL_INTERVAL:-5}
+      - BACKTEST_LEASE_SECONDS=${BACKTEST_LEASE_SECONDS:-300}
+      - BACKTEST_HEARTBEAT_SECONDS=${BACKTEST_HEARTBEAT_SECONDS:-30}
       - LOG_LEVEL=INFO
-      - ENABLE_SCREENING=${ENABLE_SCREENING:-true}
+      - ENABLE_SCREENING=false
+      - TZ=Asia/Shanghai
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/backtest_worker_healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    volumes:
+      - ../../backtest-worker/cache:/app/cache
+      - ../../data-access-lib:/deps/data-access-lib
+      - ../../quant-strategies:/deps/quant-strategies
+    networks:
+      - quant-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # 全市场筛选调度（单实例，与 queue worker 拆分）
+  backtest-screening:
+    build:
+      context: ../..
+      dockerfile: backtest-worker/Dockerfile
+    container_name: backtest-screening
+    profiles: ["backtest-local"]
+    env_file:
+      - path: ../../backtest-worker/.env
+        required: false
+    environment:
+      - MONGO_URI=${DOCKER_MONGO_URI:-mongodb://quant-mongodb:27017/}
+      - DB_NAME=${MONGO_DB}
+      - MONGO_DB=${DATA_DB_NAME:-quant_data}
+      - BACKTEST_DB_NAME=${MONGO_DB:-finance}
+      - BACKTEST_ROLE=screening
+      - BACKTEST_WORKER_ID=backtest-screening
+      - ENABLE_SCREENING=false
       - SCREENING_MODE=${SCREENING_MODE:-conservative}
       - SCREENING_STRATEGIES=${SCREENING_STRATEGIES:-}
       - SCREENING_DAYS_BACK=${SCREENING_DAYS_BACK:-}
       - SCREENING_UNIVERSE_INDEX=${SCREENING_UNIVERSE_INDEX:-}
       - SCREENING_RUN_AT=${SCREENING_RUN_AT:-}
+      - SCREENING_LOCK_TTL_SECONDS=${SCREENING_LOCK_TTL_SECONDS:-7200}
+      - LOG_LEVEL=INFO
       - TZ=Asia/Shanghai
     extra_hosts:
       - "host.docker.internal:host-gateway"
