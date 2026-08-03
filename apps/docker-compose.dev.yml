@@ -261,6 +261,8 @@ services:
       - MONGO_DB=${DATA_DB_NAME:-quant_data}
       - BACKTEST_DB_NAME=${MONGO_DB:-finance}
       - BACKTEST_ROLE=worker
+      # /deps is bind-mounted below, so reinstall over the baked-in packages.
+      - BACKTEST_REINSTALL_DEPS=true
       - BACKTEST_WORKER_ID=${BACKTEST_WORKER_ID:-}
       - BACKTEST_POLL_INTERVAL=${BACKTEST_POLL_INTERVAL:-5}
       - BACKTEST_LEASE_SECONDS=${BACKTEST_LEASE_SECONDS:-300}
@@ -305,6 +307,8 @@ services:
       - MONGO_DB=${DATA_DB_NAME:-quant_data}
       - BACKTEST_DB_NAME=${MONGO_DB:-finance}
       - BACKTEST_ROLE=screening
+      # /deps is bind-mounted below, so reinstall over the baked-in packages.
+      - BACKTEST_REINSTALL_DEPS=true
       - BACKTEST_WORKER_ID=backtest-screening
       - ENABLE_SCREENING=false
       - SCREENING_MODE=${SCREENING_MODE:-conservative}

@@ -76,17 +76,21 @@ spec:
             limits:
               cpu: "4"
               memory: "4Gi"
+          # The worker reaches its claim loop about 1s after container start now
+          # that the image no longer reinstalls dependencies at boot. The old
+          # 45s/20s delays were sized for that install and were the only reason
+          # a pod took ~31s to report ready.
           livenessProbe:
             exec:
               command: ["test", "-f", "/tmp/backtest_worker_healthy"]
-            initialDelaySeconds: 45
+            initialDelaySeconds: 15
             periodSeconds: 30
             timeoutSeconds: 5
           readinessProbe:
             exec:
               command: ["test", "-f", "/tmp/backtest_worker_healthy"]
-            initialDelaySeconds: 20
-            periodSeconds: 15
+            initialDelaySeconds: 5
+            periodSeconds: 5
             timeoutSeconds: 5
           volumeMounts:
             - name: cache
