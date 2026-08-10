@@ -1,0 +1,16 @@
+# 115 专用 override：同一 mongodb 服务，挂复制集配置 + 灾备资源限制。
+# 新机器本地开发勿用此文件，保持 docker compose up -d mongodb 即可（单机 mongod.conf）。
+#
+# 启动:
+#   docker compose -f docker-compose.yml -f docker-compose.115.yml up -d mongodb
+
+services:
+  mongodb:
+    volumes: !reset
+      - mongodb7_data:/data/db
+      - mongodb7_config:/data/configdb
+      - ./mongodb/mongod-replica.conf:/etc/mongod.conf:ro
+      - ./mongodb/keyfile:/etc/mongodb-keyfile:ro
+    mem_limit: 1536m
+    mem_reservation: 384m
+    cpus: "1.0"

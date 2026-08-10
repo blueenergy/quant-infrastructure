@@ -77,6 +77,13 @@ vim .env
 docker compose up -d
 ```
 
+**115 灾备 / 复制集 Secondary**（勿在全新开发机上使用）：
+
+```bash
+# 需先从 Primary 复制 keyfile 到 mongodb/keyfile，见 docs/MONGODB_REPLICA_SETUP.md
+docker compose -f docker-compose.yml -f docker-compose.115.yml up -d mongodb
+```
+
 ### 4. 验证部署
 
 ```bash
