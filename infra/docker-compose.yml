@@ -5,7 +5,8 @@ name: quant-infrastructure
 
 services:
   # ========================
-  # MongoDB 数据库
+  # MongoDB（单机 / 本地开发：docker compose up -d mongodb）
+  # 115 灾备/未来主库：docker compose -f docker-compose.yml -f docker-compose.115.yml up -d mongodb
   # ========================
   mongodb:
     image: mongo:7.0

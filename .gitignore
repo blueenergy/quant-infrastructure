@@ -30,3 +30,6 @@ backup/
 # Temporary files
 tmp/
 temp/
+
+# MongoDB replica set keyFile (generated on primary, copied to secondary)
+infra/mongodb/keyfile
