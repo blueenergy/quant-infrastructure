@@ -95,15 +95,271 @@ cfg.version++
 rs.reconfig(cfg)
 ```
 
-## 扶正（20 天后切主）
+## 扶正 Runbook（115 切为 Primary）
 
-1. 确认 lag ≈ 0  
-2. 在 180 上调整 priority 并 `rs.stepDown()`  
-3. `apps/env/common.env` 的 `MONGO_URI` 改为 `192.168.201.16` 或 `mongodb://...@quant-mongodb:27017/...`（同机容器），重启业务  
-4. `rs.remove("192.168.200.59:27017")`  
-5. 视负载调高 `docker-compose.115.yml` 的 `mem_limit` / `mongod-replica.conf` 的 `cacheSizeGB`
+维护窗口执行。目标：写库从 **180**（`192.168.200.59`）切到 **115**（`192.168.201.16` / `quant-mongodb`），180 随后下线。
 
-## 回滚
+**前置条件**
+
+- [ ] 115 已为 `SECONDARY`，`rs.printSecondaryReplicationInfo()` 显示 **lag ≈ 0**
+- [ ] `rs.conf()` 成员均为内网：`192.168.200.59:27017`、`192.168.201.16:27017`
+- [ ] 115 磁盘空闲 ≥ 10GB（`df -h /`）
+- [ ] 已通知业务方进入维护窗口（写库切换约 1–5 分钟）
+
+**涉及路径（115）**
+
+| 路径 | 用途 |
+|------|------|
+| `/home/deployuser/trading/quant-infrastructure/apps/env/common.env` | 全业务共享 `MONGO_URI` |
+| `/home/deployuser/trading/quant-infrastructure/apps/env/*.env` | 单服务覆盖（一般不必改，除非曾单独写死 180） |
+| `/home/deployuser/trading/quant-infrastructure/infra/` | Mongo compose override |
+
+115 上无宿主机 `mongosh` 时，用：`docker exec -it quant-mongodb mongosh -u admin -p '***' --authenticationDatabase admin`
+
+### 回退窗口与风险（必读）
+
+扶正**可以**回退到 180，但取决于切主进行到哪一步。**在 `rs.remove(180)` 之前**，复制集仍包含 180，一般可按下文「扶正失败 / 回滚」无损恢复拓扑；**之后**不能简单回退。
+
+| 阶段 | 能否回退 180 当主库？ | 数据风险 |
+|------|------------------------|----------|
+| 尚未执行 `stepDown` | ✅ 可以 | 无；维持现状即可 |
+| 已 `stepDown`，115 为 PRIMARY，**尚未** `rs.remove(180)` | ✅ 可以 | 若业务**尚未**改 `MONGO_URI`：无。若已在 115 写入：回退后 180 **没有**这些新数据 |
+| 业务已在 115 产生新写入后再回 180 | ⚠️ 复制集可回，数据不一致 | 115 上的新文档不会自动出现在 180，需手工迁回或接受丢失 |
+| 已 `rs.remove("192.168.200.59:27017")` | ❌ 不能简单回退 | 180 已非成员；只能 `rs.add` 180 并从 115 重新 initial sync，115 为唯一可信源 |
+
+**为何 `rs.remove` 前能回退？**  
+切主后 180 仍为 `SECONDARY`，与 115 同属 `rs0`。将 priority 调回 180 更高、115 上 `stepDown` 后，180 可重新升为 PRIMARY；再把 `MONGO_URI` 指回 `192.168.200.59` 即可。
+
+**操作纪律（保证可回退）**
+
+1. **先** 阶段 B（`reconfig` + `stepDown`），确认 115 为 PRIMARY  
+2. **再** 阶段 C（改 `MONGO_URI`）；建议先只重启 `quant-api` 验证，再 `./deploy.sh` 全栈  
+3. **观察** 至少 30 分钟（阶段 E 要求），确认 API、定时任务、写库正常  
+4. **最后** `rs.remove(180)` 并停 180 的 `mongod`  
+
+**勿**在业务刚切到 115、尚未观察稳定时 remove 180。  
+**勿**在 115 已承接生产写入后，指望「一键回 180」且数据完整——除非确认维护窗口内**零写入**，或已做好差异数据迁移方案。
+
+灾备期（115 仅为 `SECONDARY`，写库一直在 180）不存在「扶正失败」；下列 Runbook 仅用于**计划内切主**维护窗口。
+
+---
+
+### 阶段 A — 切主前检查（180 上，有 `mongosh`）
+
+```javascript
+rs.status().members.forEach(m => print(m.name, m.stateStr, m.health))
+rs.printSecondaryReplicationInfo()
+rs.conf().members.map(m => ({ host: m.host, priority: m.priority, votes: m.votes }))
+```
+
+期望：180 `PRIMARY`，115 `SECONDARY`，lag 0 秒。
+
+---
+
+### 阶段 B — 提升 115 为 Primary（180 上 mongosh）
+
+115 当前为 `priority: 0, votes: 0`，**不会自动升主**，必须先 `reconfig` 再 `stepDown`。
+
+```javascript
+cfg = rs.conf()
+
+// 按 host 匹配，勿假设 _id 顺序
+cfg.members.forEach(function (m) {
+  if (m.host.startsWith("192.168.201.16")) {
+    m.priority = 2
+    m.votes = 1
+  }
+  if (m.host.startsWith("192.168.200.59")) {
+    m.priority = 1
+    m.votes = 1
+  }
+})
+cfg.version++
+rs.reconfig(cfg)
+
+// 等待 reconfig 传播（数秒）
+rs.status()
+
+// 让 180 退位，115 升主（60s 内若无其他 PRIMARY 候选则失败）
+rs.stepDown(60)
+```
+
+等待 10–30 秒后确认：
+
+```javascript
+rs.status().members.forEach(m => print(m.name, m.stateStr))
+```
+
+期望：**115 → `PRIMARY`**，180 → `SECONDARY`。
+
+若 115 未升主：检查 `votes` 是否为 1、`stepDown` 是否报错；勿进入阶段 C。
+
+---
+
+### 阶段 C — 应用改连 115（115 上）
+
+**1. 修改 `common.env`**
+
+灾备期（写 180）：
+
+```bash
+MONGO_URI=mongodb://admin:***@192.168.200.59:27017/?authSource=admin&maxPoolSize=20
+```
+
+扶正后（推荐同机容器名，走 Docker 网络）：
+
+```bash
+MONGO_URI=mongodb://admin:***@quant-mongodb:27017/?authSource=admin&maxPoolSize=20
+```
+
+或使用 115 内网 IP（宿主机 / `network_mode: host` 进程适用）：
+
+```bash
+MONGO_URI=mongodb://admin:***@192.168.201.16:27017/?authSource=admin&maxPoolSize=20
+```
+
+**2. 可选：启用 115 内存 profile**（若尚未设置）
+
+```bash
+COMPOSE_HOST_PROFILE=115
+```
+
+**3. 检查单服务 env 是否写死 180**
+
+```bash
+cd /home/deployuser/trading/quant-infrastructure/apps/env
+grep -r '192.168.200.59\|180.184.28.170' . || true
+```
+
+有命中则改为 `quant-mongodb` 或 `192.168.201.16`。
+
+**4. 重启业务栈**
+
+```bash
+cd /home/deployuser/trading/quant-infrastructure/apps
+./deploy.sh
+```
+
+**5. 验证写库**
+
+```bash
+# 115 容器内
+docker exec quant-mongodb mongosh --quiet -u admin -p '***' --authenticationDatabase admin \
+  --eval 'db.adminCommand({ ismaster: 1 }).ismaster'   # 应为 true
+
+# API 健康（按实际端口）
+curl -sf http://127.0.0.1:3001/health || curl -sf http://127.0.0.1:3001/docs
+```
+
+在 `finance` 等库做一次只读查询或已知文档 spot-check，确认业务读到 115 数据。
+
+---
+
+### 阶段 D — 115 Mongo 升为生产资源配置（115 上）
+
+切主成功且业务已改 URI 后再做（会 recreate 容器配置，**不删数据卷**）：
+
+```bash
+cd /home/deployuser/trading/quant-infrastructure/infra
+docker compose -f docker-compose.yml -f docker-compose.115.yml -f docker-compose.115-primary.yml up -d mongodb
+```
+
+效果：`mem_limit` **3GB**，`mongod-replica-primary.conf`（`cacheSizeGB: 1.5`）。  
+扶正后监控：`docker stats quant-mongodb`、`free -h`。
+
+---
+
+### 阶段 E — 下线 180 成员（180 仍在线时，在 **新 Primary / 115** 上 mongosh）
+
+> **不可逆点**：`rs.remove(180)` 之后无法按「扶正失败 / 回滚」一键回到 180 主库。务必完成阶段 F 检查且观察足够时间后再执行。
+
+确认 115 业务稳定 **至少 30 分钟**（建议数小时、含一个定时任务周期）后再移除 180：
+
+```javascript
+rs.status()   // 115 为 PRIMARY，180 为 SECONDARY
+rs.remove("192.168.200.59:27017")
+rs.status()   // 仅剩 115 单成员亦可工作（单节点 PRIMARY）
+```
+
+**180 主机收尾**（确认无需回退后）：
+
+```bash
+systemctl stop mongod
+systemctl disable mongod   # 按需
+```
+
+备份任务、监控告警中的 Mongo 地址改为 115（`192.168.201.16` 或 `quant-mongodb`）。  
+若存在 `MONGODB_BACKUP_MONGO_URI`、`SECONDARY_MONGO_URI` 等变量，同步更新。
+
+---
+
+### 阶段 F — 切主后检查清单
+
+| 检查项 | 命令 / 期望 |
+|--------|-------------|
+| 复制集 | 115 `PRIMARY`，`rs.printSecondaryReplicationInfo()` 无 180 |
+| 业务写库 | 新写入文档在 115 `finance` 等库可查 |
+| 定时任务 | `quant-scheduler` / `quant-scorer` 日志无 Mongo 连接错误 |
+| 内存 | `docker stats` 无 Mongo OOM；`dmesg \| grep -i oom` 无新记录 |
+| 磁盘 | `df -h /` 余量充足 |
+
+---
+
+### 扶正失败 / 回滚（切主后发现问题，且 180 尚未 `rs.remove`）
+
+适用：**阶段 B/C 异常**，或业务切到 115 后发现问题，但**尚未**执行阶段 E 的 `rs.remove`。
+
+**若业务尚未在 115 写入**（仅改了 URI 或仅 stepDown）：按下列步骤回滚后，数据与扶正前一致。
+
+**若已在 115 有生产写入**：复制集可回到 180 主库，但 115 上多出的文档**不会**自动同步到 180（180 在回滚瞬间的数据截止于切换前的 oplog）。需评估：接受丢失、或停机导出差异后再回滚。
+
+在 **115（当前 PRIMARY）** 上：
+
+```javascript
+cfg = rs.conf()
+cfg.members.forEach(function (m) {
+  if (m.host.startsWith("192.168.200.59")) { m.priority = 2; m.votes = 1 }
+  if (m.host.startsWith("192.168.201.16")) { m.priority = 0; m.votes = 1 }
+})
+cfg.version++
+rs.reconfig(cfg)
+rs.stepDown(120)   // 115 退位，180 应重新升为 PRIMARY
+```
+
+确认 `rs.status()`：180 → `PRIMARY`，115 → `SECONDARY`。
+
+**应用回滚**：`common.env` 的 `MONGO_URI` 改回 `192.168.200.59`，`cd apps && ./deploy.sh`。
+
+若已套用 `docker-compose.115-primary.yml`，可退回仅 `docker-compose.115.yml` 的 Secondary 资源配置。
+
+**已 `rs.remove(180)` 时**：无法按上表回退。可选路径：以 115 继续修复；或将 180 作为新 Secondary `rs.add` 后从 115 全量同步（耗时长，且 115 为唯一数据源）。
+
+---
+
+### 115 扶正后内存预算（8GB 宿主机）
+
+业务与 Mongo 同机时，须给**无 mem_limit 的容器**加上限，并压低 scorer/researcher 默认顶（原默认 4G/6G 与 Mongo 叠加易 OOM）。
+
+| 组件 | 灾备 Secondary | 扶正 Primary |
+|------|----------------|--------------|
+| Mongo 容器 | 1.5GB / cache 0.5GB | **3GB / cache 1.5GB** |
+| quant-api 等无上限服务 | — | **apps/docker-compose.115.yml** 加 cap |
+| quant-scorer / researcher | 默认 4G/6G | **默认 2G/2G**（可 env 覆盖） |
+| quant-factor-researcher | 默认 8G | **`FACTOR_BACKTEST_RUNTIME=external_k8s`** |
+
+**apps**（`common.env` 设 `COMPOSE_HOST_PROFILE=115`，`deploy.sh` 自动加载 override）：
+
+```bash
+cd /home/deployuser/trading/quant-infrastructure/apps && ./deploy.sh
+```
+
+**infra Mongo Primary**（见阶段 D）。
+
+日常监控：`free -h`、`docker stats`、扶正后关注 `dmesg | grep -i oom`。长期建议 115 扩至 **16GB** 或 Mongo 独立部署。
+
+---
+
+## 回滚（灾备期，未扶正）
 
 - 未加 Secondary：去掉 180 的 replication/keyFile，重启 mongod  
 - 已加 Secondary：`rs.remove("192.168.201.16:27017")`，`compose down mongodb`

@@ -1,0 +1,95 @@
+# 115 生产机（8GB RAM）应用栈内存上限 override。
+#
+# 为无 mem_limit 的常驻服务加上 cgroup 上限，避免单容器吃光宿主机内存。
+# 与 infra/docker-compose.115-primary.yml（Mongo Primary 3GB）配合使用。
+#
+# 启用方式（二选一）:
+#   1. common.env 设置 COMPOSE_HOST_PROFILE=115，然后 ./deploy.sh
+#   2. docker compose -f docker-compose.yml -f docker-compose.115.yml up -d
+#
+# 大内存批任务（factor-researcher 默认 8GB）在 115 上应设
+# FACTOR_BACKTEST_RUNTIME=external_k8s，勿与本地 Mongo Primary 同机。
+
+services:
+  quant-api:
+    deploy:
+      resources:
+        limits:
+          memory: 1200m
+        reservations:
+          memory: 256m
+
+  quant-scheduler:
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+        reservations:
+          memory: 128m
+
+  quant-web:
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+  quant-strategy-manager:
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+        reservations:
+          memory: 128m
+
+  quant-data-engine:
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 128m
+
+  backtest-worker:
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 128m
+
+  backtest-screening:
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 128m
+
+  quant-analyzer:
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+        reservations:
+          memory: 128m
+
+  # 8GB 宿主机 + Mongo Primary：压低 scorer/researcher 默认顶，仍可用 common.env 覆盖
+  quant-scorer:
+    deploy:
+      resources:
+        limits:
+          cpus: "${SCORER_CPU_LIMIT:-2}"
+          memory: "${SCORER_MEM_LIMIT:-2g}"
+        reservations:
+          cpus: "1"
+          memory: 512m
+
+  quant-researcher:
+    deploy:
+      resources:
+        limits:
+          cpus: "${RESEARCHER_CPU_LIMIT:-2}"
+          memory: "${RESEARCHER_MEM_LIMIT:-2g}"
+        reservations:
+          cpus: "0"
+          memory: 256m

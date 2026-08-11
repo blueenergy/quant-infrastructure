@@ -1,0 +1,17 @@
+# 115 扶正为 Mongo Primary 时的资源 override（在 docker-compose.115.yml 之上叠加）。
+#
+#   cd infra
+#   docker compose -f docker-compose.yml -f docker-compose.115.yml -f docker-compose.115-primary.yml up -d mongodb
+#
+# 勿在 Secondary 全量同步期间使用（会触发容器重建）；等 SECONDARY + stepDown 后再切。
+
+services:
+  mongodb:
+    mem_limit: 3072m
+    mem_reservation: 1024m
+    cpus: "2.0"
+    volumes: !override
+      - mongodb7_data:/data/db
+      - mongodb7_config:/data/configdb
+      - ./mongodb/mongod-replica-primary.conf:/etc/mongod.conf:ro
+      - ./mongodb/keyfile:/etc/mongodb-keyfile:ro

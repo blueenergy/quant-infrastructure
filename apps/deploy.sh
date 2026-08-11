@@ -34,6 +34,9 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S %z')] $*"; }
 # injected per service via `env_file:` (env/common.env + env/<svc>.env) in the
 # compose file, so they don't need to be passed here.
 COMPOSE=(docker compose --env-file versions.env)
+if [ -f docker-compose.115.yml ] && [ "$(_common_env_get COMPOSE_HOST_PROFILE)" = "115" ]; then
+  COMPOSE+=( -f docker-compose.115.yml )
+fi
 
 # Read KEY=value from env/common.env without sourcing the whole secrets file.
 _common_env_get() {
@@ -198,6 +201,9 @@ run_hook() {
 main() {
   require_files
   resolve_local_runtime_profiles
+  if [ -f docker-compose.115.yml ] && [ "$(_common_env_get COMPOSE_HOST_PROFILE)" = "115" ]; then
+    log "COMPOSE_HOST_PROFILE=115: using docker-compose.115.yml memory limits"
+  fi
   stop_local_services_for_external_runtimes
 
   local explicit_services=0
