@@ -30,6 +30,15 @@ SERVICES=("$@")
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S %z')] $*"; }
 
+# Read KEY=value from env/common.env without sourcing the whole secrets file.
+# Must stay above the COMPOSE assignment below, which calls it.
+_common_env_get() {
+  local key="$1"
+  local file="$SCRIPT_DIR/env/common.env"
+  [ -f "$file" ] || return 0
+  grep -E "^${key}=" "$file" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true
+}
+
 # Image tags are interpolated from versions.env. Runtime config/secrets are
 # injected per service via `env_file:` (env/common.env + env/<svc>.env) in the
 # compose file, so they don't need to be passed here.
@@ -37,14 +46,6 @@ COMPOSE=(docker compose --env-file versions.env)
 if [ -f docker-compose.115.yml ] && [ "$(_common_env_get COMPOSE_HOST_PROFILE)" = "115" ]; then
   COMPOSE+=( -f docker-compose.115.yml )
 fi
-
-# Read KEY=value from env/common.env without sourcing the whole secrets file.
-_common_env_get() {
-  local key="$1"
-  local file="$SCRIPT_DIR/env/common.env"
-  [ -f "$file" ] || return 0
-  grep -E "^${key}=" "$file" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true
-}
 
 # Derive opt-in profiles for services that can run either on this Compose host
 # or in Kubernetes. Both runtimes default to local_docker for compatibility.
