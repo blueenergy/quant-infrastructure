@@ -7,8 +7,9 @@
 #   1. common.env 设置 COMPOSE_HOST_PROFILE=115，然后 ./deploy.sh
 #   2. docker compose -f docker-compose.yml -f docker-compose.115.yml up -d
 #
-# 大内存批任务（factor-researcher 默认 8GB）在 115 上应设
-# FACTOR_BACKTEST_RUNTIME=external_k8s，勿与本地 Mongo Primary 同机。
+# 注意：本文件里的 ${...} 只能由 versions.env 或 deploy shell 提供，common.env
+# 不参与 compose 插值（它只经 env_file 注入容器）。所以下面的默认值就是 115 上
+# 的实际生效值。
 
 services:
   quant-api:
@@ -73,7 +74,7 @@ services:
         reservations:
           memory: 128m
 
-  # 8GB 宿主机 + Mongo Primary：压低 scorer/researcher 默认顶，仍可用 common.env 覆盖
+  # 8GB 宿主机 + Mongo Primary：压低 scorer/researcher 默认顶
   quant-scorer:
     deploy:
       resources:
@@ -90,6 +91,23 @@ services:
         limits:
           cpus: "${RESEARCHER_CPU_LIMIT:-2}"
           memory: "${RESEARCHER_MEM_LIMIT:-2g}"
+        reservations:
+          cpus: "0"
+          memory: 256m
+
+  # base 给 factor-researcher 的 8g 等于整台机器的物理内存，起不到保护作用。它
+  # 与 Mongo Primary（3GB）同机，所以这里收到 3g。预算低于上限 1g：超预算的任务
+  # 由 check_budget 拒绝并提示改走「短窗口筛选 + 入围因子长历史复测」两阶段流程，
+  # 好过让估算失手把宿主机 OOM。CSI1000 x 158 因子实测峰值 4.2GB，在 115 上只能
+  # 走两阶段。
+  quant-factor-researcher:
+    environment:
+      - FACTOR_BACKTEST_MEMORY_BUDGET_GB=${FACTOR_BACKTEST_MEMORY_BUDGET_GB:-2}
+    deploy:
+      resources:
+        limits:
+          cpus: "${FACTOR_RESEARCHER_CPU_LIMIT:-2}"
+          memory: "${FACTOR_RESEARCHER_MEM_LIMIT:-3g}"
         reservations:
           cpus: "0"
           memory: 256m
