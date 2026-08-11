@@ -1,0 +1,20 @@
+# Log volume for quant-data-engine.
+#
+# The per-task logs under /app/logs used to live in an emptyDir, so a restart
+# erased them. Diagnosing a cron failure from the previous day then had to fall
+# back to guessing from timestamps in Mongo. The Deployment is replicas: 1 with
+# strategy Recreate, so a ReadWriteOnce claim is safe here.
+#
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: quant-data-engine-logs
+  labels:
+    app: quant-data-engine
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: cinder-csi
+  resources:
+    requests:
+      storage: 5Gi

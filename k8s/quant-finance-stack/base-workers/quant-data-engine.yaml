@@ -108,4 +108,5 @@ spec:
               mountPath: /app/logs
       volumes:
         - name: logs
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: quant-data-engine-logs

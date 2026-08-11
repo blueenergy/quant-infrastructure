@@ -8,6 +8,7 @@ resources:
   - quant-factor-researcher.yaml
   - quant-portfolio.yaml
   - quant-data-engine.yaml
+  - quant-data-engine-logs-pvc.yaml
   - backtest-worker.yaml
   - backtest-screening.yaml
   - quant-analyzer.yaml
