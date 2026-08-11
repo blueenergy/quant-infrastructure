@@ -21,7 +21,7 @@ labels:
 images:
   - name: quant-scorer:latest
     newName: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer
-    newTag: sha-dca44e5
+    newTag: sha-d4f6e6b
   - name: quant-data-engine:latest
     newName: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-data-engine
     newTag: sha-86c61a1
