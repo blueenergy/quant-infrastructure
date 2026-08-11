@@ -28,9 +28,9 @@ run_tool() {
 }
 
 log "Ensuring portfolio indexes (image: $IMAGE)"
-run_tool python tools/ensure_portfolio_indexes.py
+run_tool python tools/ops/ensure_portfolio_indexes.py
 
 log "Seeding portfolio parameter presets"
-run_tool python tools/seed_portfolio_param_presets.py --apply
+run_tool python tools/ops/seed_portfolio_param_presets.py --apply
 
 log "Portfolio database maintenance finished"
