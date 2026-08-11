@@ -187,7 +187,8 @@ services:
       - ./logs/quant-scorer:/app/logs
     networks:
       - quant-net
-    # Resource limits are tunable per environment via common.env:
+    # Resource limits come from the default below or docker-compose.115.yml;
+    # common.env cannot set them (it is env_file, not compose interpolation):
     #   SCORER_CPU_LIMIT, SCORER_MEM_LIMIT
     # Defaults assume a 4-core host; raise for larger machines.
     deploy:
@@ -228,7 +229,8 @@ services:
       - portfolio_research:/app/reports/portfolio-research
     networks:
       - quant-net
-    # Resource limits are tunable per environment via common.env:
+    # Resource limits come from the default below or docker-compose.115.yml;
+    # common.env cannot set them (it is env_file, not compose interpolation):
     #   RESEARCHER_CPU_LIMIT, RESEARCHER_MEM_LIMIT
     # Default caps sweep at half the host cores so scorer keeps headroom.
     deploy:
@@ -276,9 +278,11 @@ services:
       - ./logs/quant-factor-researcher:/app/logs
     networks:
       - quant-net
-    # Tunable per environment via common.env:
+    # Resource limits come from the default below or docker-compose.115.yml;
+    # common.env cannot set them (it is env_file, not compose interpolation):
     #   FACTOR_RESEARCHER_CPU_LIMIT, FACTOR_RESEARCHER_MEM_LIMIT
-    # A CSI1000 x 158-factor run peaked at 4.2GB RSS.
+    # A CSI1000 x 158-factor run peaked at 4.2GB RSS, so the 8g default only
+    # suits a host that is not also running Mongo. 115 caps this at 3g.
     deploy:
       resources:
         limits:
@@ -314,7 +318,8 @@ services:
       - ./logs/quant-portfolio:/app/logs
     networks:
       - quant-net
-    # Resource limits are tunable per environment via common.env:
+    # Resource limits come from the default below or docker-compose.115.yml;
+    # common.env cannot set them (it is env_file, not compose interpolation):
     #   PORTFOLIO_CPU_LIMIT, PORTFOLIO_MEM_LIMIT
     # Plan generation loop and paper cron jobs are lightweight.
     deploy:
