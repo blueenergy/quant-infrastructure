@@ -6,7 +6,9 @@
 
 services:
   mongodb:
-    volumes: !reset
+    # Primary 为 6.0 时 Secondary 必须同大版本（7.0 拒绝 6.0 wire version 心跳）
+    image: mongo:6.0
+    volumes: !override
       - mongodb7_data:/data/db
       - mongodb7_config:/data/configdb
       - ./mongodb/mongod-replica.conf:/etc/mongod.conf:ro
@@ -14,3 +16,14 @@ services:
     mem_limit: 1536m
     mem_reservation: 384m
     cpus: "1.0"
+    # Secondary 初始同步前无本地用户；勿用 admin 密码做 healthcheck
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.adminCommand('ping').ok\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+networks:
+  quant-network:
+    external: true

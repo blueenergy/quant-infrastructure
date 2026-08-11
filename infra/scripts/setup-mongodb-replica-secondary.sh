@@ -6,8 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 COMPOSE_BASE="${COMPOSE_BASE:-docker-compose.yml}"
 COMPOSE_OVERRIDE="${COMPOSE_OVERRIDE:-docker-compose.115.yml}"
-PRIMARY_HOST="${PRIMARY_HOST:-180.184.28.170}"
-SECONDARY_HOST="${SECONDARY_HOST:-115.190.172.95}"
+PRIMARY_HOST="${PRIMARY_HOST:-192.168.200.59}"   # 180 内网，与 apps/env/common.env 中 MONGO_URI 一致
+SECONDARY_HOST="${SECONDARY_HOST:-192.168.201.16}"  # 115 内网
 REPL_SET_NAME="${REPL_SET_NAME:-rs0}"
 MONGO_CONTAINER="${MONGO_CONTAINER:-quant-mongodb}"
 KEYFILE_SRC="${KEYFILE_SRC:-/etc/mongodb-keyfile}"
@@ -28,8 +28,8 @@ Starts the standard mongodb service with docker-compose.115.yml override
 (replica config + low memory). Same container/volume as future primary.
 
 Environment:
-  PRIMARY_HOST       Primary MongoDB host (default: 180.184.28.170)
-  SECONDARY_HOST     Secondary host for rs.add (default: 115.190.172.95)
+  PRIMARY_HOST       Primary VPC host (default: 192.168.200.59)
+  SECONDARY_HOST     Secondary VPC host for rs.add (default: 192.168.201.16)
   COMPOSE_OVERRIDE   Override file (default: docker-compose.115.yml)
   KEYFILE_SRC/DST    keyFile paths
   MONGO_USER         Admin user (required)
@@ -37,7 +37,7 @@ Environment:
   RESET_DATA         1 to recreate empty volumes (default: 1)
 
 Example:
-  scp root@180.184.28.170:/etc/mongodb-keyfile ./mongodb/keyfile
+  scp root@192.168.200.59:/etc/mongodb-keyfile ./mongodb/keyfile
   MONGO_USER=admin MONGO_PASSWORD='***' ./setup-mongodb-replica-secondary.sh
 EOF
 }
@@ -69,6 +69,8 @@ if [[ ! -f "${KEYFILE_DST}" ]]; then
   fi
 fi
 chmod 400 "${KEYFILE_DST}"
+# mongo 容器内 mongodb 用户 uid 通常为 999
+chown 999:999 "${KEYFILE_DST}" 2>/dev/null || true
 
 if [[ ! -f .env ]]; then
   echo "Missing ${INFRA_DIR}/.env" >&2
@@ -86,7 +88,7 @@ if docker ps -a --format '{{.Names}}' | grep -qx quant-mongodb-replica; then
   docker rm -f quant-mongodb-replica 2>/dev/null || true
 fi
 
-echo "Pulling mongo:7.0..."
+echo "Pulling mongo:6.0..."
 compose pull mongodb
 
 if [[ "${RESET_DATA}" == "1" ]]; then

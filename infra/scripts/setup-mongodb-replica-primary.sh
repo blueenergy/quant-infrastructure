@@ -2,7 +2,7 @@
 # Configure systemd MongoDB on the primary host as replica set rs0.
 set -euo pipefail
 
-PRIMARY_HOST="${PRIMARY_HOST:-180.184.28.170}"
+PRIMARY_HOST="${PRIMARY_HOST:-192.168.200.59}"
 REPL_SET_NAME="${REPL_SET_NAME:-rs0}"
 KEYFILE_PATH="${KEYFILE_PATH:-/etc/mongodb-keyfile}"
 MONGOD_CONF="${MONGOD_CONF:-/etc/mongod.conf}"
@@ -14,7 +14,7 @@ usage() {
 Usage: setup-mongodb-replica-primary.sh
 
 Environment:
-  PRIMARY_HOST     Public host:port used in rs.initiate (default: 180.184.28.170)
+  PRIMARY_HOST     VPC host used in rs.initiate (default: 192.168.200.59)
   REPL_SET_NAME    Replica set name (default: rs0)
   KEYFILE_PATH     Shared keyFile path (default: /etc/mongodb-keyfile)
   MONGOD_CONF      mongod config path (default: /etc/mongod.conf)
