@@ -42,7 +42,11 @@ _common_env_get() {
 # Image tags are interpolated from versions.env. Runtime config/secrets are
 # injected per service via `env_file:` (env/common.env + env/<svc>.env) in the
 # compose file, so they don't need to be passed here.
-COMPOSE=(docker compose --env-file versions.env)
+#
+# Pass -f docker-compose.yml explicitly: adding only `-f docker-compose.115.yml`
+# replaces the default file list, so Compose loads the memory-limit overlay
+# (no `image:`) and fails with "has neither an image nor a build context".
+COMPOSE=(docker compose --env-file versions.env -f docker-compose.yml)
 if [ -f docker-compose.115.yml ] && [ "$(_common_env_get COMPOSE_HOST_PROFILE)" = "115" ]; then
   COMPOSE+=( -f docker-compose.115.yml )
 fi
