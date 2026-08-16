@@ -366,4 +366,4 @@ cd /home/deployuser/trading/quant-infrastructure/apps && ./deploy.sh
 
 ## 版本说明
 
-Primary 为 6.0 时 Secondary **必须同为 6.0**（7.0 会 wire version 不兼容）。升级与踩坑详见 quant-wiki：`projects/devops/mongodb-replica-secondary-180-115.md`。
+Primary 为 6.0 时 Secondary **必须同为 6.0**（7.0 会 wire version 不兼容）。升级与踩坑详见 llm-wiki：`projects/devops/mongodb-replica-secondary-180-115.md`。
