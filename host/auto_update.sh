@@ -51,18 +51,16 @@ else
   log "ERROR: infra dir missing — infra skipped"
 fi
 
-# ---- apps（ACR 镜像；不因 infra 失败受影响）----
+# ---- apps（ACR 镜像；走 deploy.sh 与火山云 CD 一致：带 pre/post hooks、
+#      profiles 过滤、--wait 健康检查；不因 infra 失败受影响）----
 if [ -d "$REPO/apps" ]; then
   cd "$REPO/apps" || exit 1
   log "Updating apps..."
-  if timeout "$PULL_TIMEOUT" docker compose --env-file versions.env pull >>"$LOG" 2>&1; then
-    if docker compose --env-file versions.env up -d --remove-orphans >>"$LOG" 2>&1; then
-      log "apps deployed"
-    else
-      log "ERROR: apps compose up failed"
-    fi
+  # deploy.sh 内部已含 pull（含超时控制的 hook 内 pull），这里只做整体兜底超时。
+  if timeout 900 ./deploy.sh >>"$LOG" 2>&1; then
+    log "apps deployed"
   else
-    log "ERROR: apps compose pull timed out/failed — apps skipped"
+    log "ERROR: apps deploy failed (deploy.sh exit != 0)"
   fi
 else
   log "ERROR: apps dir missing — apps skipped"
