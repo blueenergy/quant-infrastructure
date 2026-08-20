@@ -38,14 +38,13 @@ if [ -d "$REPO/infra" ]; then
   log "Updating infra..."
   # NOTE: 不给 infra compose 传 --env-file：infra/.env 提供
   # HERMES_API_SERVER_KEY，传入 versions.env 会覆盖它导致 hermes 401。
-  if timeout "$PULL_TIMEOUT" docker compose pull >>"$LOG" 2>&1; then
-    if docker compose up -d --remove-orphans >>"$LOG" 2>&1; then
-      log "infra deployed"
-    else
-      log "ERROR: infra compose up failed"
-    fi
+  # pull 失败不阻断 up：本地已有镜像（如 hermes digest）时 up 无需联网。
+  timeout "$PULL_TIMEOUT" docker compose pull >>"$LOG" 2>&1 \
+    || log "WARN: infra compose pull timed out/failed — falling back to local images"
+  if docker compose up -d --remove-orphans >>"$LOG" 2>&1; then
+    log "infra deployed"
   else
-    log "ERROR: infra compose pull timed out/failed — infra skipped, apps continue"
+    log "ERROR: infra compose up failed"
   fi
 else
   log "ERROR: infra dir missing — infra skipped"
