@@ -115,7 +115,10 @@ services:
   # Hermes Agent 网关
   # ========================
   hermes:
-    image: nousresearch/hermes-agent:latest
+    # Pin by digest: `latest` manifest check hangs on hosts whose Docker Hub
+    # mirror stalls for nousresearch repos; digest = the build running since
+    # 2026-08-17 (newer than the v2026.4.23 used by hermes-dashboard).
+    image: nousresearch/hermes-agent@sha256:0f18f54cfcce6d434682a5cf9258bb405c6effe801ee6eea44462af1a2626cde
     container_name: hermes
     restart: unless-stopped
     #ports:
