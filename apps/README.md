@@ -49,6 +49,7 @@ Key properties:
 | `docker-compose.dev.yml` | yes | **Local dev** stack (build from sibling repos). |
 | `compose-dev.sh` | yes | Wrapper: `docker-compose.dev.yml` + **`apps/.env`** interpolation (dev). |
 | `versions.env` | yes | Desired image tags (the "values.yaml"). CI edits this. |
+| `CHANGELOG.md` | yes | Production deploy history (auto-appended by app CI). |
 | `.env.example` | yes | **Dev-only** template for compose `${VAR}` interpolation; copy to `.env`. |
 | `.env` | **no** (gitignored) | Local dev compose interpolation (`compose-dev.sh` default). |
 | `env/common.env` | **no** (gitignored) | **Production** runtime config shared by all services. |
@@ -56,6 +57,24 @@ Key properties:
 | `env/*.env.example` | yes | Templates for production `env/*.env` (copied on the host). |
 | `deploy.sh` | yes | CD entrypoint, runs on the prod host. |
 | `hooks/<svc>-{pre,post}.sh` | yes (optional) | Per-service deploy hooks (e.g. quant-api DB index migrations). |
+
+## Release notes (`CHANGELOG.md` + bump commits)
+
+Each app repo's CI `release` job calls `scripts/bump-versions-env.sh` after
+pushing an image. The script:
+
+1. Reads the previous tag from `versions.env`.
+2. Collects `git log` from the app repo between old and new SHA.
+3. Commits `versions.env` + prepends an entry to `apps/CHANGELOG.md`.
+4. Writes a multi-line commit message (source repo, compare URL, change list).
+
+Example bump commit subject: `deploy(quant-api): sha-08e3406`. The body lists
+every commit since the last production tag so infra reviewers see what went
+live without opening each app repo.
+
+**Rollout order:** merge and push `quant-infrastructure` (script + changelog
+header) to `main` *before* merging app CI changes — app workflows checkout
+infra from `main` and invoke the script from that checkout.
 
 ## Env model: layered per-service files
 
@@ -278,8 +297,10 @@ To migrate a repo:
 2. If the old deploy ran one-shot steps (e.g. quant-api index migrations),
    move them into `apps/hooks/<svc>-pre.sh` (or `-post.sh`).
 3. In the repo's CI, replace the `deploy` job with a `release` job that bumps
-   the relevant `*_IMAGE_TAG` in `versions.env` and dispatches `deploy` with
-   `client_payload.services="<svc>"` (see quant-data-engine `ci.yml`).
+   the relevant `*_IMAGE_TAG` in `versions.env` via
+   `scripts/bump-versions-env.sh` (release notes + `CHANGELOG.md`) and
+   dispatches `deploy` with `client_payload.services="<svc>"` (see
+   quant-data-engine `ci.yml`).
 4. Add `INFRA_REPO_TOKEN` to the repo secrets.
 5. Push, watch the infra Deploy workflow, verify the container, then flip the
    table row to ✅.
