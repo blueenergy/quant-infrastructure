@@ -135,7 +135,7 @@ services:
       retries: 3
       start_period: 45s
     volumes:
-      - ./hermes-data:/opt/data
+      - /home/shuyolin/hermes-data:/opt/data
     environment:
       - TZ=Asia/Shanghai
       # LLM 凭证和模型路由由 hermes-data/config.yaml 管理。
@@ -166,7 +166,7 @@ services:
     ports:
       - "9119:9119"
     volumes:
-      - ./hermes-data:/opt/data
+      - /home/shuyolin/hermes-data:/opt/data
     environment:
       - TZ=Asia/Shanghai
       # 同网络下用服务名访问 gateway 健康检查与状态。
