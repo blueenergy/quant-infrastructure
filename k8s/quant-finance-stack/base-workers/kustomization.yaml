@@ -4,6 +4,7 @@ kind: Kustomization
 # Standalone worker Deployments (Argo CD / deploy-quant-role.sh). Namespace set by overlay or kubectl -n.
 resources:
   - quant-scorer.yaml
+  - quant-scorer-audit-config.yaml
   - quant-researcher.yaml
   - quant-factor-researcher.yaml
   - quant-portfolio.yaml

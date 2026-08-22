@@ -62,6 +62,18 @@ spec:
               value: quant_data
             - name: REALTIME_DB_NAME
               value: quant_realtime
+            # All volume_price/adj-factor/index membership jobs share the
+            # finance revision ledger, including Eastmoney and MiniQMT sinks.
+            - name: PORTFOLIO_RESEARCH_SOURCE_LEDGER_MODE
+              value: "on"
+            - name: PORTFOLIO_RESEARCH_SOURCE_LEDGER_TTL_SECONDS
+              value: "900"
+            - name: PORTFOLIO_RESEARCH_SOURCE_LEDGER_HEARTBEAT_SECONDS
+              value: "60"
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_DB
+              value: finance
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_COLLECTION
+              value: portfolio_cache_source_revisions_v2
             - name: DEPLOY_MODE
               value: full
             - name: SECONDARY_MONGO_URI

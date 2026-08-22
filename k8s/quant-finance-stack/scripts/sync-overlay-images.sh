@@ -79,6 +79,25 @@ resources:
 
 patches:
   - path: researcher-replicas-patch.yaml
+  # Keep the cache producer revision identical to the immutable image tag.
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: quant-researcher
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: quant-researcher
+      spec:
+        template:
+          spec:
+            containers:
+              - name: researcher
+                env:
+                  - name: PORTFOLIO_RESEARCH_CACHE_V2_PRODUCER_REVISION
+                    value: ${SCORER_TAG}
 
 labels:
   - pairs:

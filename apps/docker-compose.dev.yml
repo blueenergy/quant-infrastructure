@@ -234,6 +234,11 @@ services:
       - MONGO_DB=${MONGO_DB}
       - DB_NAME=${MONGO_DB}
       - TZ=Asia/Shanghai
+      - PORTFOLIO_RESEARCH_SOURCE_LEDGER_MODE=on
+      - PORTFOLIO_RESEARCH_SOURCE_LEDGER_TTL_SECONDS=900
+      - PORTFOLIO_RESEARCH_SOURCE_LEDGER_HEARTBEAT_SECONDS=60
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_DB=finance
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_COLLECTION=portfolio_cache_source_revisions_v2
     restart: unless-stopped
     networks:
       - quant-network
@@ -375,11 +380,21 @@ services:
       - TUSHARE_TOKEN=${TUSHARE_TOKEN}
       - MAX_WORKERS=${SCORING_MAX_WORKERS:-6}
       - TZ=Asia/Shanghai
+      - PORTFOLIO_RESEARCH_SOURCE_LEDGER_MODE=on
+      - PORTFOLIO_RESEARCH_SOURCE_LEDGER_TTL_SECONDS=900
+      - PORTFOLIO_RESEARCH_SOURCE_LEDGER_HEARTBEAT_SECONDS=60
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_DB=finance
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_COLLECTION=portfolio_cache_source_revisions_v2
+      - PORTFOLIO_RESEARCH_COVERAGE_AUDIT_STABILITY_SECONDS=60
+      - PORTFOLIO_RESEARCH_COVERAGE_AUDIT_TTL_HOURS=24
+      - PORTFOLIO_RESEARCH_COVERAGE_AUDIT_BY=quant-scorer-cron
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
     volumes:
       - ../../stock-scoring-system/logs:/app/logs
+      - ./crontab.scorer.txt:/app/crontab.scorer.txt:ro
+      - ./scripts/run-portfolio-cache-coverage-audit.sh:/app/run-portfolio-cache-coverage-audit.sh:ro
     networks:
       - quant-network
     deploy:
@@ -418,12 +433,29 @@ services:
       - TZ=Asia/Shanghai
       - PORTFOLIO_RESEARCH_REPORT_DIR=/app/reports/portfolio-research
       - PORTFOLIO_RESEARCH_RUNTIME=${PORTFOLIO_RESEARCH_RUNTIME:-local_docker}
+      - PORTFOLIO_RESEARCH_CACHE_V2_READ_MODE=shadow
+      - PORTFOLIO_RESEARCH_CACHE_V2_WRITE_MODE=shadow
+      - PORTFOLIO_RESEARCH_CACHE_V2_BACKEND=filesystem
+      - PORTFOLIO_RESEARCH_CACHE_V2_DIR=/var/cache/portfolio-research/v2
+      - PORTFOLIO_RESEARCH_CACHE_V2_L1_MAX_BYTES=53687091200
+      - PORTFOLIO_RESEARCH_CACHE_V2_L1_EVICT_RATIO=0.85
+      - PORTFOLIO_RESEARCH_CACHE_V2_PRODUCER_REVISION=${QUANT_SCORER_IMAGE_TAG:?Set QUANT_SCORER_IMAGE_TAG to an explicit dev revision}
+      - PORTFOLIO_RESEARCH_CACHE_V2_S3_PREFIX=portfolio-research/cache/v2
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEASE_TTL_SECONDS=180
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEASE_RENEW_SECONDS=30
+      - PORTFOLIO_RESEARCH_CACHE_V2_BUILDER_WAIT_SECONDS=1200
+      - PORTFOLIO_RESEARCH_CACHE_V2_BUILDER_POLL_SECONDS=5
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_COLLECTION=portfolio_cache_source_revisions_v2
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEASE_COLLECTION=portfolio_cache_leases_v2
+      - PORTFOLIO_RESEARCH_SOURCE_LEDGER_MODE=off
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_DB=finance
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
     volumes:
       - ../../stock-scoring-system/logs/researcher:/app/logs
       - ../../shared/portfolio-research:/app/reports/portfolio-research
+      - ../../shared/portfolio-panel-cache:/var/cache/portfolio-research
     networks:
       - quant-network
     deploy:
