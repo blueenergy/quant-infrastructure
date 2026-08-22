@@ -53,9 +53,19 @@ require_file() {
   fi
 }
 
+require_exists() {
+  if [ ! -e "$1" ]; then
+    echo "ERROR: required path not found: $1" >&2
+    exit 1
+  fi
+}
+
 require_file "$VERSIONS_FILE"
 require_file "$CHANGELOG_FILE"
-require_file "$APP_REPO_DIR/.git"
+# `.git` is a directory in a normal checkout (including GitHub Actions).
+# `-f` only matches a gitfile (worktrees) and was rejecting the common case,
+# so every release job failed before bumping versions.env.
+require_exists "$APP_REPO_DIR/.git"
 
 read_old_tag() {
   grep -E "^${KEY}=" "$VERSIONS_FILE" | tail -1 | cut -d= -f2- || true
