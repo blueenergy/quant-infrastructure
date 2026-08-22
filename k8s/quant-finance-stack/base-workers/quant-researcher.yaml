@@ -69,6 +69,47 @@ spec:
               value: /app/reports/portfolio-research/checkpoints
             - name: PORTFOLIO_RESEARCH_PANEL_CACHE_DIR
               value: /app/reports/portfolio-research/panel-cache
+            # Cache Contract v2: S3 is the cross-Pod L2; the cache volume below
+            # is a disposable per-Pod L1. S3 credentials come from the existing
+            # quant-secrets envFrom above.
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_READ_MODE
+              value: shadow
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_WRITE_MODE
+              value: shadow
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_BACKEND
+              value: s3
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_DIR
+              value: /var/cache/portfolio-research/v2
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_L1_MAX_BYTES
+              value: "21474836480"
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_L1_EVICT_RATIO
+              value: "0.85"
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_PRODUCER_REVISION
+              # deploy-quant-role.sh replaces this marker; the Argo overlay
+              # patches it from apps/versions.env.
+              value: "__QUANT_SCORER_IMAGE_TAG__"
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_S3_PREFIX
+              value: portfolio-research/cache/v2
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_LEASE_TTL_SECONDS
+              value: "180"
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_LEASE_RENEW_SECONDS
+              value: "30"
+            # A cold base-panel build was observed at ~985s. Followers wait
+            # longer than that build and poll without hammering Mongo/S3.
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_BUILDER_WAIT_SECONDS
+              value: "1200"
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_BUILDER_POLL_SECONDS
+              value: "5"
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_COLLECTION
+              value: portfolio_cache_source_revisions_v2
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_LEASE_COLLECTION
+              value: portfolio_cache_leases_v2
+            # Researcher only reads source revisions. Its Mongo principal needs
+            # find on the ledger plus lease write access, but no source writes.
+            - name: PORTFOLIO_RESEARCH_SOURCE_LEDGER_MODE
+              value: "off"
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_DB
+              value: finance
             # Outer sweep ProcessPool size per job; scale replicas for more jobs.
             # Each worker holds its own copy of the score panel, so peak memory
             # scales with workers x universe size. Six workers on a ~1000-name
@@ -100,6 +141,8 @@ spec:
           volumeMounts:
             - name: reports
               mountPath: /app/reports/portfolio-research
+            - name: cache
+              mountPath: /var/cache/portfolio-research
             - name: logs
               mountPath: /app/logs
           resources:
@@ -116,5 +159,8 @@ spec:
       volumes:
         - name: reports
           emptyDir: {}
+        - name: cache
+          emptyDir:
+            sizeLimit: 20Gi
         - name: logs
           emptyDir: {}

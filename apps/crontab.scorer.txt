@@ -1,0 +1,5 @@
+# Stock scoring remains independent from coverage audit failures.
+0 19 * * 1-5 /app/run_scoring.sh
+
+# Observe all five Cache Contract v2 sources, then grant 24h coverage.
+30 21 * * 1-5 /app/run-portfolio-cache-coverage-audit.sh

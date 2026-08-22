@@ -107,6 +107,7 @@ runtime_from_files() {
   echo "${v:-local_docker}"
 }
 
+SUPPORT_MANIFEST_NAME=""
 case "$ROLE" in
   scorer)
     DEPLOYMENT="quant-scorer"
@@ -114,6 +115,7 @@ case "$ROLE" in
     RUNTIME_KEY="QUANT_SCORER_RUNTIME"
     IMAGE_PLACEHOLDER="quant-scorer:latest"
     TAG_KEY="QUANT_SCORER_IMAGE_TAG"
+    SUPPORT_MANIFEST_NAME="quant-scorer-audit-config.yaml"
   ;;
   researcher)
     DEPLOYMENT="quant-researcher"
@@ -170,6 +172,10 @@ case "$ROLE" in
 esac
 
 MANIFEST="$SCRIPT_DIR/base-workers/$MANIFEST_NAME"
+SUPPORT_MANIFEST=""
+if [ -n "$SUPPORT_MANIFEST_NAME" ]; then
+  SUPPORT_MANIFEST="$SCRIPT_DIR/base-workers/$SUPPORT_MANIFEST_NAME"
+fi
 
 if [ ! -f "$VERSIONS_FILE" ]; then
   echo "ERROR: versions file not found: $VERSIONS_FILE" >&2
@@ -179,10 +185,18 @@ if [ ! -f "$MANIFEST" ]; then
   echo "ERROR: manifest not found: $MANIFEST" >&2
   exit 1
 fi
+if [ -n "$SUPPORT_MANIFEST" ] && [ ! -f "$SUPPORT_MANIFEST" ]; then
+  echo "ERROR: support manifest not found: $SUPPORT_MANIFEST" >&2
+  exit 1
+fi
 
 image_tag="$(env_file_get "$TAG_KEY" "$VERSIONS_FILE")"
 if [ -z "$image_tag" ]; then
   echo "ERROR: $TAG_KEY is missing from $VERSIONS_FILE" >&2
+  exit 1
+fi
+if [ "$ROLE" = "researcher" ] && [ "$image_tag" = "latest" ]; then
+  echo "ERROR: Cache Contract v2 producer revision cannot use latest" >&2
   exit 1
 fi
 
@@ -239,11 +253,22 @@ fi
 image="${image_repository}:${image_tag}"
 
 render_manifest() {
-  local out
-  out="$(awk -v image="$image" -v placeholder="$IMAGE_PLACEHOLDER" -v replicas="$replicas" '
+  local out producer_revision
+  producer_revision=""
+  [ "$ROLE" = "researcher" ] && producer_revision="$image_tag"
+  out="$(awk \
+    -v image="$image" \
+    -v placeholder="$IMAGE_PLACEHOLDER" \
+    -v replicas="$replicas" \
+    -v producer_revision="$producer_revision" \
+    -v revision_placeholder="__QUANT_SCORER_IMAGE_TAG__" '
     $0 ~ ("image: " placeholder) {
       sub("image: " placeholder, "image: " image)
       image_replaced++
+    }
+    producer_revision != "" && index($0, revision_placeholder) {
+      sub(revision_placeholder, producer_revision)
+      revision_replaced++
     }
     replicas != "" && /^  replicas: [0-9]+[[:space:]]*$/ {
       sub(/replicas: [0-9]+/, "replicas: " replicas)
@@ -259,9 +284,16 @@ render_manifest() {
         print "ERROR: expected exactly one replicas field" > "/dev/stderr"
         exit 1
       }
+      if (producer_revision != "" && revision_replaced != 1) {
+        print "ERROR: expected exactly one cache producer revision marker" > "/dev/stderr"
+        exit 1
+      }
     }
   ' "$MANIFEST")" || return 1
 
+  if [ -n "$SUPPORT_MANIFEST" ]; then
+    printf '%s\n---\n' "$(cat "$SUPPORT_MANIFEST")"
+  fi
   printf '%s\n' "$out"
 }
 
