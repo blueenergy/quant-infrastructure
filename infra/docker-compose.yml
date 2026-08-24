@@ -24,9 +24,17 @@ services:
       - ./mongodb/mongod.conf:/etc/mongod.conf:ro
       - ./mongodb/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     command: mongod --config /etc/mongod.conf --auth
-    mem_limit: 8192m          # 8GB 限制
+    mem_limit: 16384m         # 16GB 限制（WT cache 6GB + 连接/聚合开销）
     mem_reservation: 2048m    # 预留 2GB
     cpus: '4.0'               # 限制 4 核
+    # Docker 默认软上限 1024，远低于 MongoDB 建议的 64000。2026-08-23 15:39 起
+    # mongod 开始 "TooManyFilesOpen" 拒绝所有新连接（maxIncomingConnections 500
+    # 加 WiredTiger 每个集合/索引的文件句柄就已经越界），并连带打挂了两个
+    # quant-researcher 副本。
+    ulimits:
+      nofile:
+        soft: 64000
+        hard: 64000
     restart: unless-stopped
     networks:
       - quant-network
