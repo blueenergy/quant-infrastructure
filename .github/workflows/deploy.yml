@@ -122,9 +122,12 @@ jobs:
     if: github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch'
     needs: [validate, sync-overlay]
     runs-on: ubuntu-latest
-    concurrency:
-      group: prod-deploy
-      cancel-in-progress: false
+    # Do NOT use a GitHub concurrency group here. `cancel-in-progress: false`
+    # still cancels *queued* runs in the same group when a newer dispatch
+    # arrives ("Canceling since a higher priority waiting request exists").
+    # App CIs often bump within seconds of each other; that dropped
+    # quant-web while api/scorer continued. Serialize on the host with flock
+    # instead so every dispatch still rolls out.
     steps:
       - name: Resolve target services
         id: svc
@@ -167,6 +170,10 @@ jobs:
                SERVICES='${SERVICES}' bash -s" <<'EOF'
           set -euo pipefail
           cd "${INFRA_REMOTE_DIR/#\~/$HOME}"
+
+          echo "[deploy] waiting for host lock"
+          exec 9>/tmp/quant-apps-deploy.lock
+          flock 9
 
           echo "[deploy] git pull desired state"
           git fetch --quiet origin main

@@ -19,6 +19,7 @@ IMAGE="crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/qu
 
 run_tool() {
   timeout 120 docker run --rm \
+    --network quant-network \
     --add-host=host.docker.internal:host-gateway \
     --env-file env/common.env \
     --env-file env/quant-scorer.env \
@@ -26,6 +27,11 @@ run_tool() {
     "$IMAGE" \
     "$@"
 }
+
+# MONGO_URI in common.env uses the compose service hostname quant-mongodb,
+# which only resolves on the shared Docker network (same as quant-api-pre.sh).
+log "Ensuring shared Docker network"
+docker network inspect quant-network >/dev/null 2>&1 || docker network create quant-network
 
 log "Ensuring portfolio indexes (image: $IMAGE)"
 run_tool python tools/ops/ensure_portfolio_indexes.py
