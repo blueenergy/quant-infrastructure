@@ -181,10 +181,20 @@ services:
       - env/quant-scorer.env
     environment:
       - TZ=Asia/Shanghai
+      - PORTFOLIO_RESEARCH_SOURCE_LEDGER_MODE=on
+      - PORTFOLIO_RESEARCH_SOURCE_LEDGER_TTL_SECONDS=900
+      - PORTFOLIO_RESEARCH_SOURCE_LEDGER_HEARTBEAT_SECONDS=60
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_DB=finance
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_COLLECTION=portfolio_cache_source_revisions_v2
+      - PORTFOLIO_RESEARCH_COVERAGE_AUDIT_STABILITY_SECONDS=60
+      - PORTFOLIO_RESEARCH_COVERAGE_AUDIT_TTL_HOURS=24
+      - PORTFOLIO_RESEARCH_COVERAGE_AUDIT_BY=quant-scorer-cron
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./logs/quant-scorer:/app/logs
+      - ./crontab.scorer.txt:/app/crontab.scorer.txt:ro
+      - ./scripts/run-portfolio-cache-coverage-audit.sh:/app/run-portfolio-cache-coverage-audit.sh:ro
     networks:
       - quant-net
     # Resource limits come from the default below or docker-compose.115.yml;
@@ -222,11 +232,32 @@ services:
       - TZ=Asia/Shanghai
       - PORTFOLIO_RESEARCH_REPORT_DIR=/app/reports/portfolio-research
       - PORTFOLIO_RESEARCH_RUNTIME=${PORTFOLIO_RESEARCH_RUNTIME:-local_docker}
+      # Cache Contract v2 reads/writes only in shadow mode; results stay fresh.
+      # The immutable scorer image tag identifies every object producer.
+      - PORTFOLIO_RESEARCH_CACHE_V2_READ_MODE=shadow
+      - PORTFOLIO_RESEARCH_CACHE_V2_WRITE_MODE=shadow
+      - PORTFOLIO_RESEARCH_CACHE_V2_BACKEND=filesystem
+      - PORTFOLIO_RESEARCH_CACHE_V2_DIR=/var/cache/portfolio-research/v2
+      - PORTFOLIO_RESEARCH_CACHE_V2_L1_MAX_BYTES=53687091200
+      - PORTFOLIO_RESEARCH_CACHE_V2_L1_EVICT_RATIO=0.85
+      - PORTFOLIO_RESEARCH_CACHE_V2_PRODUCER_REVISION=${QUANT_SCORER_IMAGE_TAG:?QUANT_SCORER_IMAGE_TAG must be an immutable tag}
+      - PORTFOLIO_RESEARCH_CACHE_V2_S3_PREFIX=portfolio-research/cache/v2
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEASE_TTL_SECONDS=180
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEASE_RENEW_SECONDS=30
+      - PORTFOLIO_RESEARCH_CACHE_V2_BUILDER_WAIT_SECONDS=1200
+      - PORTFOLIO_RESEARCH_CACHE_V2_BUILDER_POLL_SECONDS=5
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_COLLECTION=portfolio_cache_source_revisions_v2
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEASE_COLLECTION=portfolio_cache_leases_v2
+      # Researcher reads source revisions and writes only cache leases/artifacts;
+      # source collection writers are enabled in scorer/data-engine instead.
+      - PORTFOLIO_RESEARCH_SOURCE_LEDGER_MODE=off
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_DB=finance
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./logs/quant-researcher:/app/logs
       - portfolio_research:/app/reports/portfolio-research
+      - portfolio_panel_cache:/var/cache/portfolio-research
     networks:
       - quant-net
     # Resource limits come from the default below or docker-compose.115.yml;
@@ -350,6 +381,12 @@ services:
     env_file:
       - env/common.env
       - env/quant-data-engine.env
+    environment:
+      - PORTFOLIO_RESEARCH_SOURCE_LEDGER_MODE=on
+      - PORTFOLIO_RESEARCH_SOURCE_LEDGER_TTL_SECONDS=900
+      - PORTFOLIO_RESEARCH_SOURCE_LEDGER_HEARTBEAT_SECONDS=60
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_DB=finance
+      - PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_COLLECTION=portfolio_cache_source_revisions_v2
     volumes:
       - ./logs/quant-data-engine:/app/logs
     logging:
@@ -476,6 +513,10 @@ services:
 volumes:
   # Shared between quant-researcher and quant-api (portfolio research reports).
   portfolio_research:
+    driver: local
+  # Cache Contract v2 filesystem backend; keep separate from user reports.
+  portfolio_panel_cache:
+    name: quant-portfolio-panel-cache
     driver: local
   # backtest-worker job cache (strategy code, data frames, etc.)
   backtest_cache:

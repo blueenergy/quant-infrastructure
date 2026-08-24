@@ -61,6 +61,32 @@ quant-finance-stack/
 rollout 逻辑。升级默认保留线上已有副本数；researcher 与 factor-researcher 可用
 `K8S_REPLICAS=<N>` 显式扩缩容，scorer 为避免重复调度只允许 1 个副本。
 
+### quant-researcher Cache Contract v2
+
+当前两个 researcher 副本没有 RWX 存储，因此不创建 RWO PVC：每个 Pod 使用
+20 GiB `emptyDir` 作为 `/var/cache/portfolio-research` L1，跨 Pod/rollout 的
+共享 L2 使用 S3。报告仍保留在独立的 `reports` `emptyDir`。
+
+当前配置固定为 `READ_MODE=shadow`、`WRITE_MODE=shadow`、`BACKEND=s3`：
+shadow 命中仍与 fresh compute 对比，绝不 serve/publish。revision ledger 尚未覆盖
+并验证所有数据写入器前不得提升模式；回滚时把 read/write 同时设为 `off`。S3
+凭据复用现有 `quant-secrets`，清单不创建或保存新的密钥值。
+producer revision 由 `apps/versions.env` 的不可变 `QUANT_SCORER_IMAGE_TAG`
+注入：deploy helper 渲染单角色清单，overlay sync 同时更新镜像 tag 和该环境变量，
+禁止使用 `latest`。
+
+`quant-scorer` 与 `quant-data-engine` 以 source-ledger mode `on` 写入
+`finance.portfolio_cache_source_revisions_v2`，mutation TTL 900 秒、heartbeat
+60 秒；researcher 保持 writer mode `off`，只需该 ledger 的读权限和
+`finance.portfolio_cache_leases_v2` 的写权限。researcher builder 最多等待 1200
+秒、每 5 秒轮询，20 GiB L1 不变。
+
+scorer ConfigMap 在工作日 21:30 增加独立 coverage audit：两次观测五源稳定后才
+mark-complete 24 小时，并用评分锁避免和 19:00 评分重叠；失败退出非零并由
+Supercronic 记录，不会停止后续评分。首次部署的 initialize、writer 验证、shadow
+统计与 serve gate，以及外部 Windows MiniQMT 必需环境变量，见 `apps/README.md`
+的 Cache Contract v2 章节。
+
 ## K3s 快速步骤
 
 1. **构建并推送镜像**（示例标签 `latest`，生产请用版本号）  

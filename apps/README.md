@@ -236,6 +236,144 @@ s3cmd -c deployment/credentials/s3cfg mb s3://aipoc
   `PORTFOLIO_RESEARCH_WORKER_ID` from the Pod name). Prefer replicas over
   raising sweep workers to limit OOM risk.
 
+### Portfolio Research Cache Contract v2
+
+The rollout remains fully shadowed: `READ_MODE=shadow` and
+`WRITE_MODE=shadow`. A shadow read only compares a potential hit with a fresh
+computation; it never serves cached output. A shadow write never publishes a
+readable manifest. The checked-in manifests must not use `serve` or `publish`
+until revision-ledger coverage is complete and shadow comparisons are stable.
+
+- Compose uses the `filesystem` backend. Its dedicated named volume is
+  `quant-portfolio-panel-cache`, mounted at `/var/cache/portfolio-research`;
+  it is separate from the reports volume. Budget at least 50 GiB on Docker
+  hosts. `deploy.sh` only runs `compose up` and image pruning, so it preserves
+  the volume. Do not use `docker compose down -v`, which deletes it.
+- Dev Compose bind-mounts `../../shared/portfolio-panel-cache` at the same
+  path. Set `QUANT_SCORER_IMAGE_TAG` in `apps/.env` to the source revision
+  under test; never use a drifting `latest` producer revision.
+- Kubernetes uses S3 as shared L2 and a per-Pod 20 GiB `emptyDir` as disposable
+  L1. The two researcher replicas do not share a PVC. S3 credentials continue
+  to come from the existing `quant-secrets`; no new secret values are defined
+  by the workload manifest.
+- `quant-scorer` and `quant-data-engine` run with source-ledger mode `on`,
+  ledger database `finance`, and collection
+  `portfolio_cache_source_revisions_v2`. This also covers Eastmoney writers
+  started inside the data-engine image. Writer ledger failures fail the source
+  job instead of allowing an untracked mutation. Both use a 900-second mutation
+  TTL and heartbeat every 60 seconds.
+- `quant-researcher` explicitly keeps source-ledger writer mode `off`. Its
+  Mongo principal needs read access to
+  `finance.portfolio_cache_source_revisions_v2` and write access to
+  `finance.portfolio_cache_leases_v2`; existing research collection reads are
+  unchanged. No credentials are stored in these manifests.
+- Cache followers wait up to 1200 seconds and poll every 5 seconds for another
+  builder, covering the observed ~985-second cold base-panel build. Docker
+  remains budgeted at 50 GiB and Kubernetes L1 remains a 20 GiB `emptyDir`.
+- Rollback is configuration-only: set both
+  `PORTFOLIO_RESEARCH_CACHE_V2_READ_MODE=off` and
+  `PORTFOLIO_RESEARCH_CACHE_V2_WRITE_MODE=off`. Fresh computation remains the
+  correctness path.
+
+Contract collections are `portfolio_cache_source_revisions_v2` (revision
+ledger) and `portfolio_cache_leases_v2` (Mongo build leases). Lease TTL is 180
+seconds and renewal is every 30 seconds. The object prefix is
+`portfolio-research/cache/v2`.
+
+The Windows standalone MiniQMT bridge is not started by Compose. Its process
+environment must include the same writer contract before it writes
+`quant_data.volume_price`:
+
+```bash
+PORTFOLIO_RESEARCH_SOURCE_LEDGER_MODE=on
+PORTFOLIO_RESEARCH_SOURCE_LEDGER_TTL_SECONDS=900
+PORTFOLIO_RESEARCH_SOURCE_LEDGER_HEARTBEAT_SECONDS=60
+PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_DB=finance
+PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_COLLECTION=portfolio_cache_source_revisions_v2
+```
+
+First-deployment sequence:
+
+1. Deploy writer configuration while keeping researcher read/write modes at
+   `shadow`.
+2. Initialize missing ledger rows once from the scorer image:
+
+   ```bash
+   # Compose
+   docker exec quant-scorer \
+     python tools/ops/audit_portfolio_cache_sources.py --initialize --execute
+
+   # Kubernetes alternative
+   kubectl -n aipoc exec deploy/quant-scorer -- \
+     python tools/ops/audit_portfolio_cache_sources.py --initialize --execute
+   ```
+
+3. Run and verify every actual writer: scorer, data-engine stock/adj-factor/
+   index jobs, Eastmoney, and the external Windows MiniQMT bridge. Run
+   `python tools/ops/audit_portfolio_cache_sources.py` before and after and
+   confirm revisions advance, every row returns to `state=committed`, and no
+   source remains actively mutating.
+4. Only after writer coverage and collection contents are audited, manually
+   mark the bootstrap revisions complete:
+
+   ```bash
+   docker exec quant-scorer python tools/ops/audit_portfolio_cache_sources.py \
+     --mark-complete --audit-id rollout-YYYYMMDD \
+     --audited-by operator --ttl-hours 24 --execute
+   ```
+
+5. Keep `READ_MODE=shadow` and `WRITE_MODE=shadow` until hit/miss and payload
+   comparisons are stable. Audit completion alone does not authorize
+   `serve`/`publish`.
+
+After bootstrap, the scorer's Supercronic schedule runs the independent
+coverage audit at 21:30 on weekdays. The audit script:
+
+- takes two observations 60 seconds apart and requires all five sources to
+  remain committed with identical revision, count, and watermark;
+- refuses to overlap the 19:00 scorer by taking its lock non-blocking;
+- generates an UTC timestamp/hostname audit ID and grants a 24-hour TTL;
+- never initializes missing rows; use the manual `--initialize --execute`
+  bootstrap command above;
+- exits non-zero on lock contention, missing/unhealthy/active sources,
+  instability, or CLI failure. Supercronic logs that failure and continues
+  running future scoring jobs.
+
+For the shadow gate, aggregate researcher logs containing
+`shadow comparison` and `shadow comparison failed`. Require representative
+hits across every cache layer, zero comparison mismatches/failures, stable
+checksums/row counts, and acceptable latency/resource overhead over multiple
+trading days. Coverage audits must also remain continuously healthy. Only an
+explicit reviewed rollout may later change `serve`/`publish`; this repository
+continues to pin `shadow/shadow`.
+
+The ledger currently invalidates at source granularity, not date-range
+granularity. Every realtime Eastmoney/MiniQMT `volume_price` mutation therefore
+conservatively changes the global `quant_data.volume_price` revision and
+invalidates all dependent panel keys.
+
+Static validation from `apps/`:
+
+```bash
+# Production Compose
+docker compose --env-file versions.env -f docker-compose.yml \
+  --profile research-local --profile scorer-local --profile data-engine-local \
+  config >/dev/null
+
+# 115 memory-limit overlay
+docker compose --env-file versions.env \
+  -f docker-compose.yml -f docker-compose.115.yml \
+  --profile research-local --profile scorer-local --profile data-engine-local \
+  config >/dev/null
+
+# Dev Compose (after copying .env.example to .env)
+./compose-dev.sh config >/dev/null
+
+# Argo CD worker overlay (from repository root)
+kubectl kustomize k8s/quant-finance-stack/overlays/aipoc-workers \
+  | kubectl create --dry-run=client --validate=false -f -
+```
+
 **Env model (dev only):**
 
 | Layer | Purpose |

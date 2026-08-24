@@ -58,6 +58,24 @@ spec:
               value: Asia/Shanghai
             - name: DATA_DB_NAME
               value: quant_data
+            # stock_scores is a Cache Contract v2 source. Writer mutations must
+            # fail closed if the finance revision ledger cannot be updated.
+            - name: PORTFOLIO_RESEARCH_SOURCE_LEDGER_MODE
+              value: "on"
+            - name: PORTFOLIO_RESEARCH_SOURCE_LEDGER_TTL_SECONDS
+              value: "900"
+            - name: PORTFOLIO_RESEARCH_SOURCE_LEDGER_HEARTBEAT_SECONDS
+              value: "60"
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_DB
+              value: finance
+            - name: PORTFOLIO_RESEARCH_CACHE_V2_LEDGER_COLLECTION
+              value: portfolio_cache_source_revisions_v2
+            - name: PORTFOLIO_RESEARCH_COVERAGE_AUDIT_STABILITY_SECONDS
+              value: "60"
+            - name: PORTFOLIO_RESEARCH_COVERAGE_AUDIT_TTL_HOURS
+              value: "24"
+            - name: PORTFOLIO_RESEARCH_COVERAGE_AUDIT_BY
+              value: quant-scorer-cron
             # score_util.py uses this ThreadPool size for the daily run.
             - name: MAX_WORKERS
               value: "12"
@@ -81,6 +99,18 @@ spec:
           volumeMounts:
             - name: logs
               mountPath: /app/logs
+            - name: audit-config
+              mountPath: /app/crontab.scorer.txt
+              subPath: crontab.scorer.txt
+              readOnly: true
+            - name: audit-config
+              mountPath: /app/run-portfolio-cache-coverage-audit.sh
+              subPath: run-portfolio-cache-coverage-audit.sh
+              readOnly: true
       volumes:
         - name: logs
           emptyDir: {}
+        - name: audit-config
+          configMap:
+            name: quant-scorer-audit-config
+            defaultMode: 0555
