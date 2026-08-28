@@ -386,7 +386,7 @@ services:
       resources:
         limits:
           cpus: "${SCORER_CPU_LIMIT:-4}"
-          memory: "${SCORER_MEM_LIMIT:-4g}"
+          memory: "${SCORER_MEM_LIMIT:-8g}"
         reservations:
           cpus: "1"
           memory: 512m
@@ -430,7 +430,7 @@ services:
       resources:
         limits:
           cpus: "${RESEARCHER_CPU_LIMIT:-2}"
-          memory: "${RESEARCHER_MEM_LIMIT:-6g}"
+          memory: "${RESEARCHER_MEM_LIMIT:-18g}"
         reservations:
           cpus: "0"
           memory: 256m

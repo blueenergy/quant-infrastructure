@@ -191,11 +191,13 @@ services:
     # common.env cannot set them (it is env_file, not compose interpolation):
     #   SCORER_CPU_LIMIT, SCORER_MEM_LIMIT
     # Defaults assume a 4-core host; raise for larger machines.
+    # Local WSL2 host: 16 cores / 32G. 8g keeps long historical backfills
+    # (analyzer data cache grows ~25MB/date) alive; 4g OOMs after ~110 dates.
     deploy:
       resources:
         limits:
           cpus: "${SCORER_CPU_LIMIT:-4}"
-          memory: "${SCORER_MEM_LIMIT:-4g}"
+          memory: "${SCORER_MEM_LIMIT:-8g}"
         reservations:
           cpus: "1"
           memory: 512m
@@ -233,11 +235,14 @@ services:
     # common.env cannot set them (it is env_file, not compose interpolation):
     #   RESEARCHER_CPU_LIMIT, RESEARCHER_MEM_LIMIT
     # Default caps sweep at half the host cores so scorer keeps headroom.
+    # Local WSL2 host: a full-history csi1000 panel (~1.2M rows) sweeps past
+    # 12g and gets OOM-killed mid-checkpoint; 18g matches production's 16GiB
+    # headroom on this larger panel (verified 2026-08-28).
     deploy:
       resources:
         limits:
           cpus: "${RESEARCHER_CPU_LIMIT:-2}"
-          memory: "${RESEARCHER_MEM_LIMIT:-6g}"
+          memory: "${RESEARCHER_MEM_LIMIT:-18g}"
         reservations:
           cpus: "0"
           memory: 256m
