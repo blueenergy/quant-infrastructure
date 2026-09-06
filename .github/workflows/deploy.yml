@@ -22,6 +22,8 @@ name: Deploy app stack
 #
 # Required secrets:
 #   VOLC_SSH_KEY, VOLC_HOST, VOLC_USER, ALIYUN_USER, ALIYUN_TOKEN
+# Optional (CI/CD failure → DingTalk, same robot as data-contract alerts):
+#   DATA_CONTRACT_WEBHOOK_URL, DATA_CONTRACT_WEBHOOK_SECRET
 # Optional repo variable:
 #   INFRA_REMOTE_DIR (default: ~/trading/quant-infrastructure)
 # ============================================================================
@@ -193,3 +195,15 @@ jobs:
             [ "$attempt" -eq 3 ] && exit 1
             sleep $((attempt * 30))
           done
+
+  notify-dingtalk:
+    name: Notify DingTalk on failure
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    needs: [validate, sync-overlay, deploy]
+    uses: ./.github/workflows/notify-dingtalk.yml
+    secrets:
+      DATA_CONTRACT_WEBHOOK_URL: ${{ secrets.DATA_CONTRACT_WEBHOOK_URL }}
+      DATA_CONTRACT_WEBHOOK_SECRET: ${{ secrets.DATA_CONTRACT_WEBHOOK_SECRET }}
+    with:
+      workflow: ${{ github.workflow }}
+      needs_json: ${{ toJSON(needs) }}

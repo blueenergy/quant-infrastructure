@@ -1,0 +1,46 @@
+# Unit tests for the CI failure → DingTalk helper.
+# Path-filtered so a script tweak does not start the SSH deploy workflow
+# (deploy.yml has no push trigger for the same reason).
+
+name: CI DingTalk notifier
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/notify_ci_dingtalk.py"
+      - "scripts/test_notify_ci_dingtalk.py"
+      - ".github/workflows/notify-dingtalk.yml"
+      - ".github/workflows/ci-notify.yml"
+  pull_request:
+    paths:
+      - "scripts/notify_ci_dingtalk.py"
+      - "scripts/test_notify_ci_dingtalk.py"
+      - ".github/workflows/notify-dingtalk.yml"
+      - ".github/workflows/ci-notify.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: unittest notify_ci_dingtalk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run stdlib tests
+        working-directory: scripts
+        run: python3 -m unittest test_notify_ci_dingtalk.py -v
+
+  notify-dingtalk:
+    name: Notify DingTalk on failure
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    needs: [test]
+    uses: ./.github/workflows/notify-dingtalk.yml
+    secrets:
+      DATA_CONTRACT_WEBHOOK_URL: ${{ secrets.DATA_CONTRACT_WEBHOOK_URL }}
+      DATA_CONTRACT_WEBHOOK_SECRET: ${{ secrets.DATA_CONTRACT_WEBHOOK_SECRET }}
+    with:
+      workflow: ${{ github.workflow }}
+      needs_json: ${{ toJSON(needs) }}

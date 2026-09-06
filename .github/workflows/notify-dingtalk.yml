@@ -1,0 +1,184 @@
+# Reusable workflow: DingTalk markdown when a caller CI job has failed.
+#
+# Call from each repo (needs every job that can go red; skipped jobs are OK):
+#
+#   notify-dingtalk:
+#     name: Notify DingTalk on failure
+#     if: ${{ always() && contains(needs.*.result, 'failure') }}
+#     needs: [test-build, docker, release]
+#     uses: blueenergy/quant-infrastructure/.github/workflows/notify-dingtalk.yml@main
+#     secrets:
+#       DATA_CONTRACT_WEBHOOK_URL: ${{ secrets.DATA_CONTRACT_WEBHOOK_URL }}
+#       DATA_CONTRACT_WEBHOOK_SECRET: ${{ secrets.DATA_CONTRACT_WEBHOOK_SECRET }}
+#     with:
+#       workflow: ${{ github.workflow }}
+#       needs_json: ${{ toJSON(needs) }}
+#
+# Same-repo callers (this repository) should use:
+#   uses: ./.github/workflows/notify-dingtalk.yml
+#
+# Required GitHub org secrets (same robot as k8s data-contract alerts):
+#   DATA_CONTRACT_WEBHOOK_URL
+#   DATA_CONTRACT_WEBHOOK_SECRET
+#
+# quant-infrastructure → Settings → Actions → General → Access must allow
+# other private repositories in the blueenergy org to use this workflow.
+#
+# Keep the embedded Python in sync with scripts/notify_ci_dingtalk.py.
+
+name: Notify DingTalk on CI failure
+
+on:
+  workflow_call:
+    inputs:
+      workflow:
+        type: string
+        required: false
+        default: ""
+      needs_json:
+        type: string
+        required: false
+        default: "{}"
+    secrets:
+      DATA_CONTRACT_WEBHOOK_URL:
+        required: false
+      DATA_CONTRACT_WEBHOOK_SECRET:
+        required: false
+
+permissions: {}
+
+jobs:
+  notify:
+    name: Send DingTalk markdown
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send DingTalk markdown
+        env:
+          DATA_CONTRACT_WEBHOOK_URL: ${{ secrets.DATA_CONTRACT_WEBHOOK_URL }}
+          DATA_CONTRACT_WEBHOOK_SECRET: ${{ secrets.DATA_CONTRACT_WEBHOOK_SECRET }}
+          CI_REPOSITORY: ${{ github.repository }}
+          CI_REF: ${{ github.ref_name }}
+          CI_SHA: ${{ github.sha }}
+          CI_ACTOR: ${{ github.actor }}
+          CI_EVENT: ${{ github.event_name }}
+          CI_WORKFLOW: ${{ inputs.workflow }}
+          CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CI_NEEDS: ${{ inputs.needs_json }}
+        run: |
+          python3 <<'PY'
+          # Keep in sync with scripts/notify_ci_dingtalk.py
+          from __future__ import annotations
+
+          import base64
+          import hashlib
+          import hmac
+          import json
+          import os
+          import sys
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          WEBHOOK_URL_ENV = "DATA_CONTRACT_WEBHOOK_URL"
+          WEBHOOK_SECRET_ENV = "DATA_CONTRACT_WEBHOOK_SECRET"
+          WEBHOOK_TIMEOUT_ENV = "DATA_CONTRACT_WEBHOOK_TIMEOUT"
+
+
+          def signed_url(url: str, secret: str, now_ms=None) -> str:
+              if not secret or "oapi.dingtalk.com" not in url:
+                  return url
+              timestamp = str(now_ms if now_ms is not None else round(time.time() * 1000))
+              digest = hmac.new(
+                  secret.encode("utf-8"),
+                  f"{timestamp}\n{secret}".encode("utf-8"),
+                  hashlib.sha256,
+              ).digest()
+              sign = urllib.parse.quote_plus(base64.b64encode(digest))
+              return f"{url}&timestamp={timestamp}&sign={sign}"
+
+
+          def failed_job_names(needs_json: str):
+              try:
+                  needs = json.loads(needs_json or "{}")
+              except json.JSONDecodeError:
+                  return []
+              if not isinstance(needs, dict):
+                  return []
+              return [
+                  str(name)
+                  for name, spec in needs.items()
+                  if isinstance(spec, dict) and spec.get("result") == "failure"
+              ]
+
+
+          def build_payload(repository, workflow, event, ref, sha, actor, run_url, failed_jobs):
+              subject = f"[CI] 失败 {repository}"
+              sha7 = sha[:7] if sha else ""
+              failed = ", ".join(failed_jobs) or "unknown"
+              lines = [
+                  f"## {subject}",
+                  "",
+                  f"- workflow: {workflow}",
+                  f"- event: {event}",
+                  f"- branch: {ref}",
+                  f"- sha: `{sha7}`",
+                  f"- actor: {actor}",
+                  f"- failed jobs: **{failed}**",
+              ]
+              if run_url:
+                  lines.append(f"- [打开 Actions]({run_url})")
+              return {"msgtype": "markdown", "markdown": {"title": subject, "text": "\n".join(lines)}}
+
+
+          def send(url: str, payload: dict, secret: str, timeout: float) -> dict:
+              body = json.dumps(payload).encode("utf-8")
+              req = urllib.request.Request(
+                  signed_url(url, secret),
+                  data=body,
+                  headers={"Content-Type": "application/json"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=timeout) as resp:
+                      raw = resp.read().decode("utf-8")
+              except urllib.error.HTTPError as exc:
+                  raw = exc.read().decode("utf-8", errors="replace")
+                  raise RuntimeError(f"HTTP {exc.code}: {raw[:300]}") from exc
+              try:
+                  parsed = json.loads(raw)
+              except json.JSONDecodeError as exc:
+                  raise RuntimeError(f"non-json response: {raw[:300]}") from exc
+              errcode = parsed.get("errcode")
+              if errcode:
+                  raise RuntimeError(f"errcode={errcode} errmsg={parsed.get('errmsg')!r}")
+              return parsed
+
+
+          def main() -> int:
+              url = (os.environ.get(WEBHOOK_URL_ENV) or "").strip()
+              if not url:
+                  print(f"notify_ci_dingtalk: {WEBHOOK_URL_ENV} is not set; skip", file=sys.stderr)
+                  return 0
+              payload = build_payload(
+                  repository=os.environ.get("CI_REPOSITORY") or "",
+                  workflow=os.environ.get("CI_WORKFLOW") or "",
+                  event=os.environ.get("CI_EVENT") or "",
+                  ref=os.environ.get("CI_REF") or "",
+                  sha=os.environ.get("CI_SHA") or "",
+                  actor=os.environ.get("CI_ACTOR") or "",
+                  run_url=os.environ.get("CI_RUN_URL") or "",
+                  failed_jobs=failed_job_names(os.environ.get("CI_NEEDS") or "{}"),
+              )
+              try:
+                  timeout = float(os.environ.get(WEBHOOK_TIMEOUT_ENV) or "10")
+                  send(url, payload, (os.environ.get(WEBHOOK_SECRET_ENV) or "").strip(), timeout)
+              except Exception as exc:
+                  print(f"notify_ci_dingtalk: failed to send alert: {exc}", file=sys.stderr)
+                  return 1
+              print(f"DingTalk CI alert sent: {payload['markdown']['title']}")
+              return 0
+
+
+          raise SystemExit(main())
+          PY

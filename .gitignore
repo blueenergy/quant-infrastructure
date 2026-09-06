@@ -30,6 +30,8 @@ backup/
 # Temporary files
 tmp/
 temp/
+__pycache__/
+*.pyc
 
 # MongoDB replica set keyFile (generated on primary, copied to secondary)
 infra/mongodb/keyfile
