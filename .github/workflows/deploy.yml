@@ -149,7 +149,11 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.VOLC_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan "${{ secrets.VOLC_HOST }}" >> ~/.ssh/known_hosts
+          # Host key probe is best-effort: the SSH step already uses
+          # StrictHostKeyChecking=no. A one-shot ssh-keyscan timeout used to
+          # fail the whole deploy (and now pings DingTalk) before any rollout.
+          ssh-keyscan -T 10 "${{ secrets.VOLC_HOST }}" >> ~/.ssh/known_hosts \
+            || echo "ssh-keyscan failed (non-fatal)"
 
       - name: Deploy over SSH
         timeout-minutes: 30
