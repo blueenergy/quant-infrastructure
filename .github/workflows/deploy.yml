@@ -63,7 +63,11 @@ jobs:
           # Legacy single .env still referenced by not-yet-migrated services.
           touch .env
           docker compose --env-file versions.env config >/dev/null
-          echo "compose config OK"
+          docker compose --env-file versions.env --profile mcp config >/dev/null
+          echo "compose config OK (including mcp profile)"
+      - name: Test MCP profile gating
+        working-directory: apps
+        run: bash test_deploy_mcp_profile.sh
 
   sync-overlay:
     name: Sync Argo CD overlay image tags

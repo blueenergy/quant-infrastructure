@@ -39,8 +39,9 @@ run_index_tool 600 python tools/check_and_fix_indexes.py --apply \
 
 # First compose-managed rollout must remove any legacy docker-run containers
 # with the same names; otherwise docker compose cannot create container_name
-# targets. This remains safe on later deploys because compose recreates them in
-# the following up step.
+# targets. Stopping MCP here is intentional: deploy.sh expands a non-115
+# quant-api roll to also `up` quant-mcp-read / quant-mcp-actions; on 115 those
+# services are filtered out so they stay down.
 for container in quant-mcp-actions quant-mcp-read quant-mcp quant-scheduler quant-api; do
   log "Removing legacy/existing container if present: $container"
   timeout 30 docker stop -t 20 "$container" 2>/dev/null || true

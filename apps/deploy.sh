@@ -18,6 +18,9 @@
 # Optional env:
 #   ACR_REGISTRY  (default: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com)
 #   COMPOSE_WAIT  (default: 1 -> pass --wait to `up`)
+#
+# MCP (quant-mcp-read / quant-mcp-actions) uses Compose profile `mcp`.
+# deploy.sh enables it by default except COMPOSE_HOST_PROFILE=115.
 # ============================================================================
 set -euo pipefail
 
@@ -26,7 +29,7 @@ cd "$SCRIPT_DIR"
 
 ACR_REGISTRY="${ACR_REGISTRY:-crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com}"
 COMPOSE_WAIT="${COMPOSE_WAIT:-1}"
-SERVICES=("$@")
+SERVICES=()
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S %z')] $*"; }
 
@@ -34,9 +37,125 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S %z')] $*"; }
 # Must stay above the COMPOSE assignment below, which calls it.
 _common_env_get() {
   local key="$1"
-  local file="$SCRIPT_DIR/env/common.env"
+  local file="${DEPLOY_COMMON_ENV:-$SCRIPT_DIR/env/common.env}"
   [ -f "$file" ] || return 0
   grep -E "^${key}=" "$file" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true
+}
+
+_host_is_115() {
+  [ "$(_common_env_get COMPOSE_HOST_PROFILE)" = "115" ]
+}
+
+# Trim spaces and test whether a comma-separated profile list contains needle.
+_csv_has_profile() {
+  local needle="$1"
+  local csv="${2:-}"
+  local item
+  local IFS=','
+  local -a items
+  read -ra items <<< "$csv"
+  for item in "${items[@]}"; do
+    item="${item// /}"
+    [ "$item" = "$needle" ] && return 0
+  done
+  return 1
+}
+
+_csv_without_profile() {
+  local needle="$1"
+  local csv="${2:-}"
+  local item
+  local -a kept=()
+  local IFS=','
+  local -a items
+  read -ra items <<< "$csv"
+  for item in "${items[@]}"; do
+    item="${item// /}"
+    [ -z "$item" ] && continue
+    [ "$item" = "$needle" ] && continue
+    kept+=("$item")
+  done
+  local IFS=,
+  echo "${kept[*]}"
+}
+
+_is_mcp_service() {
+  case "$1" in
+    quant-mcp-read|quant-mcp-actions) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+_append_service_if_missing() {
+  local svc="$1"
+  local existing
+  for existing in "${SERVICES[@]+"${SERVICES[@]}"}"; do
+    [ "$existing" = "$svc" ] && return 0
+  done
+  SERVICES+=("$svc")
+  log "Including $svc (shares QUANT_API_IMAGE_TAG; mcp profile default-on)"
+}
+
+# MCP containers stay behind Compose profile "mcp". Enable it on every host
+# except COMPOSE_HOST_PROFILE=115 (8GB + Mongo Primary). A hand-written mcp
+# entry in COMPOSE_PROFILES is also stripped on 115.
+apply_mcp_profile() {
+  local profiles="${COMPOSE_PROFILES:-}"
+  if _host_is_115; then
+    if _csv_has_profile mcp "$profiles"; then
+      log "COMPOSE_HOST_PROFILE=115: dropping mcp profile (MCP stays off)"
+      COMPOSE_PROFILES="$(_csv_without_profile mcp "$profiles")"
+      export COMPOSE_PROFILES
+    fi
+    return 0
+  fi
+  if ! _csv_has_profile mcp "$profiles"; then
+    if [ -n "$profiles" ]; then
+      COMPOSE_PROFILES="${profiles},mcp"
+    else
+      COMPOSE_PROFILES="mcp"
+    fi
+    export COMPOSE_PROFILES
+    log "Enabled mcp profile (COMPOSE_HOST_PROFILE is not 115)"
+  fi
+}
+
+# Non-115 quant-api / scheduler rolls must recreate MCP: they share the API
+# image, and quant-api-pre.sh stop/rm's the MCP container names.
+expand_mcp_services() {
+  _host_is_115 && return 0
+  [ "${#SERVICES[@]}" -eq 0 ] && return 0
+  local wants_mcp=0 svc
+  for svc in "${SERVICES[@]}"; do
+    case "$svc" in
+      quant-api|quant-scheduler|quant-mcp-read|quant-mcp-actions) wants_mcp=1 ;;
+    esac
+  done
+  [ "$wants_mcp" = 1 ] || return 0
+  _append_service_if_missing quant-mcp-read
+  _append_service_if_missing quant-mcp-actions
+}
+
+filter_mcp_services_on_115() {
+  _host_is_115 || return 0
+  [ "${#SERVICES[@]}" -eq 0 ] && return 0
+  local svc
+  local -a kept=()
+  for svc in "${SERVICES[@]}"; do
+    if _is_mcp_service "$svc"; then
+      log "Skipping $svc (COMPOSE_HOST_PROFILE=115; MCP stays off)"
+      continue
+    fi
+    kept+=("$svc")
+  done
+  SERVICES=("${kept[@]+"${kept[@]}"}")
+}
+
+stop_mcp_on_115() {
+  _host_is_115 || return 0
+  log "COMPOSE_HOST_PROFILE=115: ensuring MCP containers are stopped"
+  "${COMPOSE[@]}" --profile mcp stop quant-mcp-read quant-mcp-actions 2>/dev/null || true
+  "${COMPOSE[@]}" --profile mcp rm -f quant-mcp-read quant-mcp-actions 2>/dev/null || true
 }
 
 # Image tags are interpolated from versions.env. Runtime config/secrets are
@@ -57,41 +176,42 @@ resolve_local_runtime_profiles() {
   if [ -n "${COMPOSE_PROFILES+x}" ] && [ -n "${COMPOSE_PROFILES}" ]; then
     export COMPOSE_PROFILES
     log "COMPOSE_PROFILES already set: ${COMPOSE_PROFILES}"
-    return 0
-  fi
-
-  local research_runtime factor_backtest_runtime scorer_runtime portfolio_runtime data_engine_runtime backtest_runtime analyzer_runtime configured_profiles
-  local -a profiles=()
-  research_runtime="$(_common_env_get PORTFOLIO_RESEARCH_RUNTIME)"
-  factor_backtest_runtime="$(_common_env_get FACTOR_BACKTEST_RUNTIME)"
-  scorer_runtime="$(_common_env_get QUANT_SCORER_RUNTIME)"
-  portfolio_runtime="$(_common_env_get QUANT_PORTFOLIO_RUNTIME)"
-  data_engine_runtime="$(_common_env_get QUANT_DATA_ENGINE_RUNTIME)"
-  backtest_runtime="$(_common_env_get BACKTEST_WORKER_RUNTIME)"
-  analyzer_runtime="$(_common_env_get QUANT_ANALYZER_RUNTIME)"
-  configured_profiles="$(_common_env_get COMPOSE_PROFILES)"
-  research_runtime="${research_runtime:-local_docker}"
-  factor_backtest_runtime="${factor_backtest_runtime:-local_docker}"
-  scorer_runtime="${scorer_runtime:-local_docker}"
-  portfolio_runtime="${portfolio_runtime:-local_docker}"
-  data_engine_runtime="${data_engine_runtime:-local_docker}"
-  backtest_runtime="${backtest_runtime:-local_docker}"
-  analyzer_runtime="${analyzer_runtime:-local_docker}"
-
-  if [ -n "$configured_profiles" ]; then
-    export COMPOSE_PROFILES="$configured_profiles"
   else
-    [ "$research_runtime" = "local_docker" ] && profiles+=("research-local")
-    [ "$factor_backtest_runtime" = "local_docker" ] && profiles+=("factor-research-local")
-    [ "$scorer_runtime" = "local_docker" ] && profiles+=("scorer-local")
-    [ "$portfolio_runtime" = "local_docker" ] && profiles+=("portfolio-local")
-    [ "$data_engine_runtime" = "local_docker" ] && profiles+=("data-engine-local")
-    [ "$backtest_runtime" = "local_docker" ] && profiles+=("backtest-local")
-    [ "$analyzer_runtime" = "local_docker" ] && profiles+=("analyzer-local")
-    local IFS=,
-    export COMPOSE_PROFILES="${profiles[*]}"
+    local research_runtime factor_backtest_runtime scorer_runtime portfolio_runtime data_engine_runtime backtest_runtime analyzer_runtime configured_profiles
+    local -a profiles=()
+    research_runtime="$(_common_env_get PORTFOLIO_RESEARCH_RUNTIME)"
+    factor_backtest_runtime="$(_common_env_get FACTOR_BACKTEST_RUNTIME)"
+    scorer_runtime="$(_common_env_get QUANT_SCORER_RUNTIME)"
+    portfolio_runtime="$(_common_env_get QUANT_PORTFOLIO_RUNTIME)"
+    data_engine_runtime="$(_common_env_get QUANT_DATA_ENGINE_RUNTIME)"
+    backtest_runtime="$(_common_env_get BACKTEST_WORKER_RUNTIME)"
+    analyzer_runtime="$(_common_env_get QUANT_ANALYZER_RUNTIME)"
+    configured_profiles="$(_common_env_get COMPOSE_PROFILES)"
+    research_runtime="${research_runtime:-local_docker}"
+    factor_backtest_runtime="${factor_backtest_runtime:-local_docker}"
+    scorer_runtime="${scorer_runtime:-local_docker}"
+    portfolio_runtime="${portfolio_runtime:-local_docker}"
+    data_engine_runtime="${data_engine_runtime:-local_docker}"
+    backtest_runtime="${backtest_runtime:-local_docker}"
+    analyzer_runtime="${analyzer_runtime:-local_docker}"
+
+    if [ -n "$configured_profiles" ]; then
+      export COMPOSE_PROFILES="$configured_profiles"
+    else
+      [ "$research_runtime" = "local_docker" ] && profiles+=("research-local")
+      [ "$factor_backtest_runtime" = "local_docker" ] && profiles+=("factor-research-local")
+      [ "$scorer_runtime" = "local_docker" ] && profiles+=("scorer-local")
+      [ "$portfolio_runtime" = "local_docker" ] && profiles+=("portfolio-local")
+      [ "$data_engine_runtime" = "local_docker" ] && profiles+=("data-engine-local")
+      [ "$backtest_runtime" = "local_docker" ] && profiles+=("backtest-local")
+      [ "$analyzer_runtime" = "local_docker" ] && profiles+=("analyzer-local")
+      local IFS=,
+      export COMPOSE_PROFILES="${profiles[*]}"
+    fi
+    log "PORTFOLIO_RESEARCH_RUNTIME=${research_runtime} FACTOR_BACKTEST_RUNTIME=${factor_backtest_runtime} QUANT_SCORER_RUNTIME=${scorer_runtime} QUANT_PORTFOLIO_RUNTIME=${portfolio_runtime} QUANT_DATA_ENGINE_RUNTIME=${data_engine_runtime} BACKTEST_WORKER_RUNTIME=${backtest_runtime} QUANT_ANALYZER_RUNTIME=${analyzer_runtime} COMPOSE_PROFILES=${COMPOSE_PROFILES:-<empty>}"
   fi
-  log "PORTFOLIO_RESEARCH_RUNTIME=${research_runtime} FACTOR_BACKTEST_RUNTIME=${factor_backtest_runtime} QUANT_SCORER_RUNTIME=${scorer_runtime} QUANT_PORTFOLIO_RUNTIME=${portfolio_runtime} QUANT_DATA_ENGINE_RUNTIME=${data_engine_runtime} BACKTEST_WORKER_RUNTIME=${backtest_runtime} QUANT_ANALYZER_RUNTIME=${analyzer_runtime} COMPOSE_PROFILES=${COMPOSE_PROFILES:-<empty>}"
+  apply_mcp_profile
+  log "COMPOSE_PROFILES after mcp gate: ${COMPOSE_PROFILES:-<empty>}"
 }
 
 _service_external_k8s() {
@@ -204,9 +324,10 @@ run_hook() {
 }
 
 main() {
+  SERVICES=("$@")
   require_files
   resolve_local_runtime_profiles
-  if [ -f docker-compose.115.yml ] && [ "$(_common_env_get COMPOSE_HOST_PROFILE)" = "115" ]; then
+  if [ -f docker-compose.115.yml ] && _host_is_115; then
     log "COMPOSE_HOST_PROFILE=115: using docker-compose.115.yml memory limits"
   fi
   stop_local_services_for_external_runtimes
@@ -215,9 +336,12 @@ main() {
   if [ "${#SERVICES[@]}" -gt 0 ]; then
     explicit_services=1
   fi
+  expand_mcp_services
+  filter_mcp_services_on_115
+  stop_mcp_on_115
   filter_services_for_external_runtimes
   if [ "$explicit_services" -eq 1 ] && [ "${#SERVICES[@]}" -eq 0 ]; then
-    log "No services left to deploy after research-runtime filter"
+    log "No services left to deploy after runtime/MCP filters"
     return 0
   fi
 
@@ -284,4 +408,6 @@ main() {
   log "Deploy finished"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

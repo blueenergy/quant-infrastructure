@@ -45,8 +45,8 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  # [MIGRATED] Optional MCP read server. It remains behind the "mcp" profile to
-  # preserve current production default (DEPLOY_MCP=false).
+  # [MIGRATED] MCP read server. Stays behind the "mcp" profile so 115 can keep
+  # it off (8GB + Mongo Primary). deploy.sh enables the profile everywhere else.
   quant-mcp-read:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:${QUANT_API_IMAGE_TAG:-latest}
     container_name: quant-mcp-read
@@ -80,8 +80,7 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  # [MIGRATED] Optional MCP actions server. It remains behind the "mcp" profile
-  # to preserve current production default (DEPLOY_MCP=false).
+  # [MIGRATED] MCP actions server. Same "mcp" profile gate as quant-mcp-read.
   quant-mcp-actions:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:${QUANT_API_IMAGE_TAG:-latest}
     container_name: quant-mcp-actions
@@ -116,7 +115,7 @@ services:
         max-file: "3"
 
   # [MIGRATED] Mirrors quantFinance CI scheduler container. It is deployed
-  # together with quant-api in v1; MCP remains opt-in through the "mcp" profile.
+  # together with quant-api in v1. MCP is default-on via profile "mcp" except on 115.
   quant-scheduler:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-api:${QUANT_API_IMAGE_TAG:-latest}
     container_name: quant-scheduler

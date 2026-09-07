@@ -7,6 +7,9 @@
 #   1. common.env 设置 COMPOSE_HOST_PROFILE=115，然后 ./deploy.sh
 #   2. docker compose -f docker-compose.yml -f docker-compose.115.yml up -d
 #
+# MCP（quant-mcp-read / quant-mcp-actions）不在本 overlay 里禁用：deploy.sh 在
+# COMPOSE_HOST_PROFILE=115 时去掉 mcp profile，并 stop/rm 残留容器。
+#
 # 注意：本文件里的 ${...} 只能由 versions.env 或 deploy shell 提供，common.env
 # 不参与 compose 插值（它只经 env_file 注入容器）。所以下面的默认值就是 115 上
 # 的实际生效值。

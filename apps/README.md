@@ -124,6 +124,24 @@ cp -n .env.example .env   # first time; edit secrets
 # research-local and scorer-local are on by default via COMPOSE_PROFILES.
 ```
 
+## MCP servers
+
+`quant-mcp-read` (port 3002) and `quant-mcp-actions` (port 3003) share the
+`quant-api` image and sit behind Compose profile `mcp`.
+
+`deploy.sh` **enables `mcp` by default** on every host except
+`COMPOSE_HOST_PROFILE=115` (8GB RAM + Mongo Primary). On 115 the profile is
+stripped even if `COMPOSE_PROFILES` lists `mcp`, and leftover MCP containers
+are stopped. A targeted `quant-api` / `quant-scheduler` deploy on a non-115
+host also rolls both MCP containers so they stay on `QUANT_API_IMAGE_TAG`.
+
+Local `docker-compose.dev.yml` starts MCP without a profile (full-stack `up`
+already includes them).
+
+```bash
+bash test_deploy_mcp_profile.sh   # deploy.sh 115 vs default-on gates
+```
+
 ## Daily scorer runtime
 
 `quant-scorer` runs the weekday 19:00 scoring schedule. Run exactly one
