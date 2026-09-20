@@ -66,6 +66,11 @@ services:
     ports:
       - "3002:3002"
     volumes:
+      # REQUIRED: portfolio_research_result reads the full 324-row artifact from
+      # disk (_load_full_result_rows). Without this mount it silently falls back
+      # to Mongo's 200-row preview, which drops the worst performers and flips
+      # axis_effects verdicts from mixed to *_dominates. Same volume as quant-api.
+      - portfolio_research:/app/reports/portfolio-research
       - ./logs/quant-api:/app/logs
     networks:
       - quant-net
