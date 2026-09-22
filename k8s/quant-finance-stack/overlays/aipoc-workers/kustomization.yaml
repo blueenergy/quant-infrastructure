@@ -30,4 +30,4 @@ images:
     newTag: sha-3860504
   - name: quant-analyzer:latest
     newName: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-analyzer
-    newTag: sha-1343802
+    newTag: sha-a688572
