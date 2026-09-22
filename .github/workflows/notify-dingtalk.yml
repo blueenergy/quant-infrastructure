@@ -6,11 +6,6 @@
 #     name: Notify DingTalk on failure
 #     if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
 #     needs: [test-build, docker, release]
-#
-# The 'cancelled' half is not optional. A job that exceeds its
-# timeout-minutes is reported by GitHub as 'cancelled', not 'failure', so a
-# failure-only guard stays silent on exactly the hang it was added to catch
-# (2026-09-21: a stalled registry push went unnoticed for 3.5 hours).
 #     uses: blueenergy/quant-infrastructure/.github/workflows/notify-dingtalk.yml@main
 #     secrets:
 #       DATA_CONTRACT_WEBHOOK_URL: ${{ secrets.DATA_CONTRACT_WEBHOOK_URL }}
@@ -18,6 +13,11 @@
 #     with:
 #       workflow: ${{ github.workflow }}
 #       needs_json: ${{ toJSON(needs) }}
+#
+# The 'cancelled' half of that guard is not optional: a job that exceeds its
+# timeout-minutes is reported by GitHub as 'cancelled', not 'failure', so a
+# failure-only guard stays silent on exactly the hang it was added to catch
+# (2026-09-21: a stalled registry push went unnoticed for 3.5 hours).
 #
 # Same-repo callers (this repository) should use:
 #   uses: ./.github/workflows/notify-dingtalk.yml
