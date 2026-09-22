@@ -45,7 +45,14 @@ def signed_url(url: str, secret: str, now_ms: int | None = None) -> str:
 
 
 def failed_job_names(needs_json: str) -> list[str]:
-    """Parse GitHub `toJSON(needs)` and return job ids whose result is failure."""
+    """Parse GitHub `toJSON(needs)` and return the jobs worth alerting on.
+
+    'failure' comes through bare; 'cancelled' is tagged, because a job killed
+    by timeout-minutes (or a manual cancel) never published its image and
+    never dispatched a deploy -- exactly how the 2026-09-21 stalled registry
+    push stayed invisible for 3.5 hours. GitHub reports a timeout as
+    'cancelled', not 'failure', so filtering on 'failure' alone goes silent.
+    """
     try:
         needs = json.loads(needs_json or "{}")
     except json.JSONDecodeError:
@@ -54,8 +61,13 @@ def failed_job_names(needs_json: str) -> list[str]:
         return []
     names = []
     for name, spec in needs.items():
-        if isinstance(spec, dict) and spec.get("result") == "failure":
+        if not isinstance(spec, dict):
+            continue
+        result = spec.get("result")
+        if result == "failure":
             names.append(str(name))
+        elif result == "cancelled":
+            names.append(f"{name} (cancelled)")
     return names
 
 

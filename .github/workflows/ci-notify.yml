@@ -35,7 +35,7 @@ jobs:
 
   notify-dingtalk:
     name: Notify DingTalk on failure
-    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
     needs: [test]
     uses: ./.github/workflows/notify-dingtalk.yml
     secrets:

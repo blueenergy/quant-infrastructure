@@ -4,8 +4,13 @@
 #
 #   notify-dingtalk:
 #     name: Notify DingTalk on failure
-#     if: ${{ always() && contains(needs.*.result, 'failure') }}
+#     if: ${{ always() && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
 #     needs: [test-build, docker, release]
+#
+# The 'cancelled' half is not optional. A job that exceeds its
+# timeout-minutes is reported by GitHub as 'cancelled', not 'failure', so a
+# failure-only guard stays silent on exactly the hang it was added to catch
+# (2026-09-21: a stalled registry push went unnoticed for 3.5 hours).
 #     uses: blueenergy/quant-infrastructure/.github/workflows/notify-dingtalk.yml@main
 #     secrets:
 #       DATA_CONTRACT_WEBHOOK_URL: ${{ secrets.DATA_CONTRACT_WEBHOOK_URL }}
@@ -99,17 +104,28 @@ jobs:
 
 
           def failed_job_names(needs_json: str):
+              # 'failure' comes through bare; 'cancelled' is tagged, because a
+              # job killed by timeout-minutes (or a manual cancel) never
+              # published its image and never dispatched a deploy -- exactly
+              # how the 2026-09-21 stalled registry push stayed invisible for
+              # 3.5 hours. GitHub reports a timeout as 'cancelled', not
+              # 'failure', so filtering on 'failure' alone goes silent.
               try:
                   needs = json.loads(needs_json or "{}")
               except json.JSONDecodeError:
                   return []
               if not isinstance(needs, dict):
                   return []
-              return [
-                  str(name)
-                  for name, spec in needs.items()
-                  if isinstance(spec, dict) and spec.get("result") == "failure"
-              ]
+              names = []
+              for name, spec in needs.items():
+                  if not isinstance(spec, dict):
+                      continue
+                  result = spec.get("result")
+                  if result == "failure":
+                      names.append(str(name))
+                  elif result == "cancelled":
+                      names.append(f"{name} (cancelled)")
+              return names
 
 
           def build_payload(repository, workflow, event, ref, sha, actor, run_url, failed_jobs):

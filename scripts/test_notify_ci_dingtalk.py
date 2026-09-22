@@ -27,6 +27,17 @@ class FailedJobNamesTests(unittest.TestCase):
         }
         self.assertEqual(failed_job_names(json.dumps(needs)), ["test-build"])
 
+    def test_tags_cancelled_so_a_timeout_stays_visible(self):
+        # GitHub reports a job that exceeds its timeout-minutes as 'cancelled',
+        # not 'failure' -- so filtering on 'failure' alone is exactly how the
+        # 2026-09-21 stalled registry push stayed invisible for 3.5 hours.
+        needs = {
+            "test-build": {"result": "success"},
+            "docker": {"result": "cancelled"},
+            "release": {"result": "skipped"},
+        }
+        self.assertEqual(failed_job_names(json.dumps(needs)), ["docker (cancelled)"])
+
     def test_empty_and_garbage(self):
         self.assertEqual(failed_job_names(""), [])
         self.assertEqual(failed_job_names("not-json"), [])
