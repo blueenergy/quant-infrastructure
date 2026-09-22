@@ -27,7 +27,7 @@ images:
     newTag: sha-e32ba29
   - name: backtest-worker:latest
     newName: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/backtest-worker
-    newTag: sha-481511c
+    newTag: sha-3860504
   - name: quant-analyzer:latest
     newName: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-analyzer
     newTag: sha-38d7e1d
