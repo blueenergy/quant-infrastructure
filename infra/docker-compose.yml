@@ -22,6 +22,7 @@ services:
       - mongodb7_data:/data/db
       - mongodb7_config:/data/configdb
       - ./mongodb/mongod.conf:/etc/mongod.conf:ro
+      - ./mongodb/keyfile:/etc/mongodb-keyfile:ro   # gitignored；uid 999 / mode 400
       - ./mongodb/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     command: mongod --config /etc/mongod.conf --auth
     mem_limit: 16384m         # 16GB 限制（WT cache 6GB + 连接/聚合开销）

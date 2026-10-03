@@ -1,0 +1,34 @@
+# 灾备 Secondary override（本机之外的第二台：Mac 192.168.3.5 / 云主机同理）
+#
+# 与 docker-compose.115.yml 同一思路：共用服务名 mongodb、同一套数据卷，
+# 只把配置换成 replica 版（mongod-replica.conf）+ 压住资源 —— 日后扶正时
+# 不换容器、不迁卷。区别是 115 那份绑死了 mongo:6.0，本文件不锁版本，
+# 供同大版本（7.0）的灾备机复用。
+#
+# 用法：docker compose -f docker-compose.yml -f docker-compose.secondary.yml up -d mongodb
+#
+# 前置：
+#   1. infra/mongodb/keyfile —— 从 primary 拷贝，uid 999 / mode 400（gitignored）
+#   2. 在 primary 上 rs.add("192.168.3.5:27017")（初始同步会清空本机原有数据）
+#
+# ⚠️ 不要在本机用裸 `docker compose up -d` 起 mongodb：那会退回 16GB / 6GB cache
+#    的主库配置。本文件的 mem_limit 按灾备机资源（Mac Docker VM 7.75GB）定。
+
+services:
+  mongodb:
+    # 勿用 !reset：Compose 5.x 上会丢挂载（115 踩过），!override 才生效。
+    volumes: !override
+      - mongodb7_data:/data/db
+      - mongodb7_config:/data/configdb
+      - ./mongodb/mongod-replica.conf:/etc/mongod.conf:ro   # 0.5GB cache / maxConn 100
+      - ./mongodb/keyfile:/etc/mongodb-keyfile:ro
+      - ./mongodb/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+
+    mem_limit: 2048m
+    mem_reservation: 512m
+    cpus: "2.0"
+
+    healthcheck:
+      # Secondary 初次同步完成前没有本地用户（用户随数据从 primary 同步过来），
+      # 用密码 ping 会被判失败并反复重启容器 —— 115 踩坑 §4.5，这里必须换成无认证 ping。
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.adminCommand('ping').ok\" || exit 1"]
