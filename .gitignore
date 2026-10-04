@@ -6,6 +6,7 @@
 # Per-service runtime env files (secrets). Examples (*.env.example) stay tracked,
 # and apps/versions.env (image tags) is intentionally NOT ignored.
 apps/env/*.env
+host/.env.monitor
 
 # Hermes runtime data store (created & owned by the hermes container).
 infra/hermes-data/
