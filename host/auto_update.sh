@@ -27,7 +27,11 @@ if [ -z "$REMOTE" ] || [ "$LOCAL" = "$REMOTE" ]; then
 fi
 
 log "New commit, pulling..."
-if ! git pull 2>&1 >> "$LOG"; then
+# Redirect order matters: `>> "$LOG" 2>&1` sends BOTH streams to the log.
+# Written the other way round (`2>&1 >> "$LOG"`), stderr binds to the original
+# stdout first and the real git error never reaches the log -- cron has no
+# redirection either, so a failed pull left no trace of why (2026-10-07).
+if ! git pull >>"$LOG" 2>&1; then
   log "ERROR: git pull failed — deploy skipped"
   exit 1
 fi
