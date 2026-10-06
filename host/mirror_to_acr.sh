@@ -45,7 +45,11 @@ LOG_MAX_BYTES=${LOG_MAX_BYTES:-5242880}
 RECENT_TAGS=${RECENT_TAGS:-3}
 # Cross-border read measured at ~300 KB/s (209 MB ≈ 12 min); push inside China
 # measured at ~6.4 MB/s. Budget generously for the read, it is the only slow leg.
-PULL_TIMEOUT=${PULL_TIMEOUT:-2400}
+# 2026-10-05 slow day: ~95 KB/s against a 222 MB compressed image ≈ 39 min —
+# the old 2400s cap died one breath short of finishing. The retry below then
+# resumes the blobs from the containerd content store (40 min partial → 6 min).
+PULL_TIMEOUT=${PULL_TIMEOUT:-3600}
+PULL_RETRY_TIMEOUT=${PULL_RETRY_TIMEOUT:-1800}
 PUSH_TIMEOUT=${PUSH_TIMEOUT:-900}
 
 # ACR repo | ghcr image | app repo directory (used to resolve the newest tag).
@@ -122,10 +126,16 @@ mirror_tag() {
     return 0
   fi
 
-  log "  v pull $src (cross-border, can take ~15 min)"
+  log "  v pull $src (cross-border; slow days may run to the pull timeout)"
   if ! timeout "$PULL_TIMEOUT" docker pull -q --platform linux/amd64 "$src"; then
-    log "  x pull failed: $src"
-    return 1
+    # A timed-out pull keeps its blobs in the containerd content store, so an
+    # immediate retry resumes where it stopped (2026-10-05: 40 min partial →
+    # 6 min to finish). One compact retry, then fail loudly.
+    log "  x pull timed out: $src; retrying once (resume, up to $((PULL_RETRY_TIMEOUT / 60)) min)"
+    if ! timeout "$PULL_RETRY_TIMEOUT" docker pull -q --platform linux/amd64 "$src"; then
+      log "  x pull failed: $src"
+      return 1
+    fi
   fi
   docker tag "$src" "$dst" || { log "  x tag failed"; return 1; }
 

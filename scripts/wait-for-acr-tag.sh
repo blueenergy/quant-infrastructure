@@ -29,7 +29,10 @@ ACR_REPO=${ACR_REPO:?ACR_REPO is required}
 TAG=${TAG:?TAG is required}
 ALIYUN_USER=${ALIYUN_USER:?ALIYUN_USER is required}
 ALIYUN_TOKEN=${ALIYUN_TOKEN:?ALIYUN_TOKEN is required}
-TIMEOUT=${TIMEOUT:-2700}
+# Slow-day budget (2026-10-05): relay tick 5 min + pull 60 min + resume retry
+# 30 min + push/verify ~2 min ≈ 97 min worst; 90 min covers the realistic path
+# (resume makes the retry minutes, not the full cap).
+TIMEOUT=${TIMEOUT:-5400}
 INTERVAL=${INTERVAL:-30}
 
 # ACR answers /v2/ with a 401 that names its token service; the docker CLI does
