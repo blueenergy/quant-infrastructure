@@ -24,10 +24,10 @@ images:
     newTag: sha-d33e501
   - name: quant-data-engine:latest
     newName: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-data-engine
-    newTag: sha-3e8ec17
+    newTag: sha-802d2c4
   - name: backtest-worker:latest
     newName: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/backtest-worker
     newTag: sha-3860504
   - name: quant-analyzer:latest
     newName: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-analyzer
-    newTag: sha-a688572
+    newTag: sha-f62757e
