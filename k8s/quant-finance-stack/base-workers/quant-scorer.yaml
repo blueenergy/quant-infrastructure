@@ -61,6 +61,14 @@ spec:
             # score_util.py uses this ThreadPool size for the daily run.
             - name: MAX_WORKERS
               value: "12"
+            # Daily run + mark_scoring_run universe list (comma-separated, no spaces).
+            # Default in the image is five indices (no csi2000); keep explicit here so
+            # K8s matches Compose prod intent. Six-index union ~3.8k symbols; peak RAM
+            # ~13–14Gi — limits below leave headroom vs the old 8Gi Compose default.
+            - name: SCORING_CORE_INDEX_CODES
+              value: "hs300,a500,csi500,csi1000,csi2000,star50"
+            - name: SCORING_RUN_UNIVERSE_INDEXES
+              value: "hs300,a500,csi500,csi1000,csi2000,star50"
             - name: MONGO_URL
               valueFrom:
                 secretKeyRef:
@@ -74,7 +82,7 @@ spec:
           resources:
             requests:
               cpu: "4"
-              memory: "8Gi"
+              memory: "10Gi"
             limits:
               cpu: "12"
               memory: "16Gi"
