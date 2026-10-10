@@ -421,6 +421,39 @@ services:
         max-size: "50m"
         max-file: "3"
 
+  # quantTrader 实盘下单端（大 QMT RPC 桥）。profile 门控 —— 不加 --profile 不会启动，
+  # 恢复交易的决策与部署解耦（与 quant-realtime-* 同一套惯例）。
+  #
+  # 只用 quant-trader 镜像（Dockerfile.prod）：它不含 sim/，假 xtquant 不存在；
+  # 模拟器是另一个镜像（quant-trader-sim），不要在这里用。
+  #
+  # 验证跑法（只读、不下单，不需要改挂载的配置）。注意 run 会自行带出 profile：
+  #   docker compose --env-file versions.env -f docker-compose.yml \
+  #     run --rm -e TRADER_QMT_BRIDGE_ALLOW_ORDERS=false quant-trader
+  quant-trader:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-trader:${QUANT_TRADER_IMAGE_TAG:-latest}
+    container_name: quant-trader
+    profiles: ["trader-local"]
+    restart: unless-stopped
+    # QMT RPC 在 Windows loopback 上（mirrored 模式下容器内 127.0.0.1 即 Windows）；
+    # 桥接网络下 127.0.0.1 是容器自己，连不上 15626。
+    network_mode: host
+    environment:
+      # 14:55 收盘前强撤是 wall-clock 判据，容器时钟必须是本地时区
+      - TZ=Asia/Shanghai
+      # outbox 默认 fallback 到 LOCALAPPDATA/cwd，容器 recreate 会丢待上报队列
+      - QUANT_TRADER_EXECUTION_OUTBOX_PATH=/app/data/execution_outbox.json
+    volumes:
+      # 交易配置（含 mongo_uri / 桥账号 / 端口），JSON 优先于 env —— 挂对文件是关键
+      - /home/shuyolin/trading/quantTrader/config.qmt_bridge.json:/app/config/config.json:ro
+      - ./data/quant-trader:/app/data
+      - ./logs/quant-trader:/root/.local/share/quantTrader/logs
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
   # [MIGRATED] Mirrors CI deploy: add-host for same-host API calls, cache
   # volume, log rotation, layered env.
   backtest-worker:

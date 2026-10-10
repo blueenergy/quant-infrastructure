@@ -335,11 +335,13 @@ services:
         max-file: "3"
 
   # 模拟 quantTrader：Linux/dev 环境中用 fake xtquant 走真实 miniQMT broker 路径。
-  # 显式启动：docker compose up -d --build quant-trader
+  # 显式启动：./compose-dev.sh up -d --build quant-trader
+  # Dockerfile.sim（不是 Dockerfile.prod）：模拟器镜像不 COPY vendor/，因此
+  # broker=qmt_bridge 在这里构造即抛错，不可能误连真券商。
   quant-trader:
     build:
       context: ../../quantTrader
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.sim
     container_name: quant-trader
     env_file:
       - path: ../../quantTrader/.env

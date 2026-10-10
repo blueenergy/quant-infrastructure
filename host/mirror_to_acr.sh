@@ -63,6 +63,10 @@ IMAGE_MAP=(
   "wukongquant/quant-data-engine|ghcr.io/blueenergy/quant-data-engine|quant-data-engine"
   "wukongquant/quant-strategy-manager|ghcr.io/blueenergy/quant-strategy-manager|quant-strategy-manager"
   "wukongquant/backtest-worker|ghcr.io/blueenergy/backtest-worker|backtest-worker"
+  # quantTrader publishes two mutually exclusive images from the same repo:
+  # quant-trader = live (vendor bridge, no sim/), quant-trader-sim = simulator.
+  "wukongquant/quant-trader|ghcr.io/blueenergy/quant-trader|quantTrader"
+  "wukongquant/quant-trader-sim|ghcr.io/blueenergy/quant-trader-sim|quantTrader"
 )
 
 # stderr, not stdout: stdout carries resolved tags and must stay clean. Both
