@@ -367,6 +367,60 @@ services:
         max-size: "50m"
         max-file: "3"
 
+  # QMT realtime bridges, migrated off Windows (2026-10-10; see llm-wiki
+  # daily/2026-10-10). Host network + WSL mirrored loopback = container reaches
+  # the QMT RPC on Windows directly via 127.0.0.1:15609/15626. Configs are
+  # machine-local runtime files (gitignored in quant-data-engine), mounted
+  # read-only from the WSL checkout. quote-account-id CLI override pins the
+  # 行情 instance until the JSONs themselves are aligned post-cutover.
+  quant-realtime-dayk:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-data-engine:${QUANT_DATA_ENGINE_IMAGE_TAG:-latest}
+    container_name: quant-realtime-dayk
+    profiles: ["data-engine-local"]
+    restart: unless-stopped
+    network_mode: host
+    working_dir: /app
+    command: >
+      python3 scripts/run_miniqmt_bridge.py
+      --config scripts/bigqmt_rpc_bridge.json
+      --quote-account-id 8885156549
+      --loop
+    env_file:
+      - env/common.env
+      - env/quant-data-engine.env
+    volumes:
+      - /home/shuyolin/trading/quant-data-engine/scripts/bigqmt_rpc_bridge.json:/app/scripts/bigqmt_rpc_bridge.json:ro
+      - ./logs/quant-realtime-dayk:/app/logs
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  quant-realtime-minute:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-data-engine:${QUANT_DATA_ENGINE_IMAGE_TAG:-latest}
+    container_name: quant-realtime-minute
+    profiles: ["data-engine-local"]
+    restart: unless-stopped
+    network_mode: host
+    working_dir: /app
+    command: >
+      python3 scripts/run_miniqmt_bridge.py
+      --config scripts/bigqmt_rpc_bridge.watchlist_minute_kline.json
+      --quote-account-id 8885156549
+      --loop
+    env_file:
+      - env/common.env
+      - env/quant-data-engine.env
+    volumes:
+      - /home/shuyolin/trading/quant-data-engine/scripts/bigqmt_rpc_bridge.watchlist_minute_kline.json:/app/scripts/bigqmt_rpc_bridge.watchlist_minute_kline.json:ro
+      - ./logs/quant-realtime-minute:/app/logs
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
   # [MIGRATED] Mirrors CI deploy: add-host for same-host API calls, cache
   # volume, log rotation, layered env.
   backtest-worker:
