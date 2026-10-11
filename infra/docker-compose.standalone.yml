@@ -1,0 +1,15 @@
+# 本机 Linux / 非 WSL 灾备拓扑：MongoDB 单机 standalone（不要 keyfile、不要 rs0）
+#
+# 启动（仅 Mongo，或与其它 infra 服务一起）:
+#   cd infra
+#   docker compose -f docker-compose.yml -f docker-compose.standalone.yml up -d mongodb
+#
+# WSL 主库 + Mac Secondary 复制集勿用本文件；见 mongodb/README.md
+
+services:
+  mongodb:
+    volumes: !override
+      - mongodb7_data:/data/db
+      - mongodb7_config:/data/configdb
+      - ./mongodb/mongod-standalone.conf:/etc/mongod.conf:ro
+      - ./mongodb/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro

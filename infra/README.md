@@ -77,6 +77,13 @@ vim .env
 docker compose up -d
 ```
 
+**MongoDB 两种模式（不要混用）** — 详见 [`mongodb/README.md`](mongodb/README.md)：
+
+| 环境 | 命令 |
+|------|------|
+| **WSL 主库 + Mac 灾备**（`rs0` + `keyfile`） | `docker compose up -d mongodb` |
+| **本机 Linux 单机 standalone**（无复制集） | `docker compose -f docker-compose.yml -f docker-compose.standalone.yml up -d mongodb` |
+
 **115 灾备 / 复制集 Secondary**（勿在全新开发机上使用）：
 
 ```bash

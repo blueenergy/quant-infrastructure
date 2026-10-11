@@ -5,8 +5,9 @@ name: quant-infrastructure
 
 services:
   # ========================
-  # MongoDB（单机 / 本地开发：docker compose up -d mongodb）
-  # 115 灾备/未来主库：docker compose -f docker-compose.yml -f docker-compose.115.yml up -d mongodb
+  # MongoDB 默认 = WSL 主库复制集（mongod.conf + keyfile），见 mongodb/README.md
+  # 本机 Linux 单机：docker compose -f docker-compose.yml -f docker-compose.standalone.yml up -d mongodb
+  # 115 Secondary：docker compose -f docker-compose.yml -f docker-compose.115.yml up -d mongodb
   # ========================
   mongodb:
     image: mongo:7.0
