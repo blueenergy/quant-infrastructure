@@ -1,0 +1,91 @@
+# Standalone ML training worker (quant_ml). Image: quant-model-trainer (quant-model-platform repo).
+# Deploy: K8S_NAMESPACE=aipoc ../deploy-quant-role.sh model-trainer
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quant-model-trainer
+  labels:
+    app: quant-model-trainer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quant-model-trainer
+  template:
+    metadata:
+      labels:
+        app: quant-model-trainer
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: model-trainer
+          image: quant-model-trainer:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--limit-per-iteration"
+            - "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          envFrom:
+            - secretRef:
+                name: quant-secrets
+          env:
+            - name: TZ
+              value: Asia/Shanghai
+            - name: HOME
+              value: /tmp
+            - name: MODEL_TRAINING_RUNTIME
+              value: external_k8s
+            - name: MODEL_TRAINING_LOOP_INTERVAL_SECONDS
+              value: "5"
+            - name: MODEL_TRAINING_LOOP_LIMIT
+              value: "1"
+            - name: MODEL_TRAINING_STALE_MINUTES
+              value: "120"
+            - name: QUANT_ML_DB
+              value: quant_ml
+            - name: QUANT_ML_PARQUET_ROOT
+              value: /tmp/quant_ml/parquet
+            - name: MODEL_TRAINING_WORKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MONGO_URI
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+            - name: parquet
+              mountPath: /tmp/quant_ml
+          resources:
+            requests:
+              cpu: "4"
+              memory: "32Gi"
+            limits:
+              cpu: "4"
+              memory: "32Gi"
+      volumes:
+        - name: logs
+          emptyDir: {}
+        - name: parquet
+          emptyDir: {}

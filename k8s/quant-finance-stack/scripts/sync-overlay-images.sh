@@ -62,6 +62,7 @@ SCORER_TAG="$(tag_get QUANT_SCORER_IMAGE_TAG)"
 DATA_TAG="$(tag_get QUANT_DATA_ENGINE_IMAGE_TAG)"
 BACKTEST_TAG="$(tag_get BACKTEST_WORKER_IMAGE_TAG)"
 ANALYZER_TAG="$(tag_get QUANT_ANALYZER_IMAGE_TAG)"
+TRAINER_TAG="$(tag_get QUANT_MODEL_TRAINER_IMAGE_TAG)"
 RESEARCHER_REPLICAS="${K8S_RESEARCHER_REPLICAS:-2}"
 
 tmp="$(mktemp)"
@@ -99,6 +100,9 @@ images:
   - name: quant-analyzer:latest
     newName: ${acr_parent}/quant-analyzer
     newTag: ${ANALYZER_TAG}
+  - name: quant-model-trainer:latest
+    newName: ${acr_parent}/quant-model-trainer
+    newTag: ${TRAINER_TAG}
 EOF
 
 if [ "$MODE" = check ]; then
@@ -127,4 +131,4 @@ spec:
   replicas: ${RESEARCHER_REPLICAS}
 PATCHEOF
 
-echo "Wrote $KUSTOMIZATION (scorer/data/backtest/analyzer tags from versions.env)"
+echo "Wrote $KUSTOMIZATION (scorer/data/backtest/analyzer/trainer tags from versions.env)"

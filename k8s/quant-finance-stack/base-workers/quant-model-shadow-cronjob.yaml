@@ -1,0 +1,49 @@
+# Daily shadow predictions into quant_ml.model_predictions (旁路).
+# Uses quant-model-trainer image; does not affect production scores.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: quant-model-shadow
+  labels:
+    app: quant-model-shadow
+spec:
+  schedule: "30 18 * * 1-5"
+  timeZone: Asia/Shanghai
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+          containers:
+            - name: shadow
+              image: quant-model-trainer:latest
+              imagePullPolicy: IfNotPresent
+              command:
+                - python
+                - -m
+                - quant_model_platform.workers.shadow_loop
+                - --once
+              envFrom:
+                - secretRef:
+                    name: quant-secrets
+              env:
+                - name: TZ
+                  value: Asia/Shanghai
+                - name: HOME
+                  value: /tmp
+                - name: QUANT_ML_DB
+                  value: quant_ml
+                - name: QUANT_ML_PARQUET_ROOT
+                  value: /tmp/quant_ml/parquet
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: "4Gi"
+                limits:
+                  cpu: "2"
+                  memory: "8Gi"

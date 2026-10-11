@@ -4,8 +4,8 @@
 # Usage:
 #   deploy-quant-role.sh <role> [--render]
 #
-# Roles: scorer | researcher | factor-researcher | portfolio | data-engine |
-#        backtest | backtest-screening | analyzer
+# Roles: scorer | researcher | factor-researcher | model-trainer | portfolio |
+#        data-engine | backtest | backtest-screening | analyzer
 #
 # K8S_REPLICAS overrides replica count where allowed (scorer/portfolio/data-engine/
 # backtest/analyzer must stay at 1 unless noted).
@@ -25,6 +25,7 @@ Roles:
   factor-researcher
                 Alpha158 factor backtest queue worker (scalable; one job
                 holds several GB, so give each replica its own memory).
+  model-trainer ML training worker for quant_ml (singleton; 4 CPU / 32GiB).
   portfolio     Plan generation + paper-trading cron (singleton).
   data-engine   Market data sync + cron (singleton).
   backtest      Backtest queue worker (scalable).
@@ -41,10 +42,11 @@ QUANT_SCORER_IMAGE_REPOSITORY parent path (wukongquant/*) or per-role overrides:
   QUANT_DATA_ENGINE_IMAGE_REPOSITORY
   BACKTEST_WORKER_IMAGE_REPOSITORY
   QUANT_ANALYZER_IMAGE_REPOSITORY
+  QUANT_MODEL_TRAINER_IMAGE_REPOSITORY
 
 Runtime gates (apps/env/common.env or apps/.env for dev):
   QUANT_SCORER_RUNTIME, PORTFOLIO_RESEARCH_RUNTIME, FACTOR_BACKTEST_RUNTIME,
-  QUANT_PORTFOLIO_RUNTIME, QUANT_DATA_ENGINE_RUNTIME,
+  MODEL_TRAINING_RUNTIME, QUANT_PORTFOLIO_RUNTIME, QUANT_DATA_ENGINE_RUNTIME,
   BACKTEST_WORKER_RUNTIME, QUANT_ANALYZER_RUNTIME
   Each must be external_k8s before deploy (except --render).
 
@@ -53,7 +55,7 @@ EOF
 }
 
 usage() {
-  echo "Usage: $0 {scorer|researcher|factor-researcher|portfolio|data-engine|backtest|backtest-screening|analyzer} [--render]" >&2
+  echo "Usage: $0 {scorer|researcher|factor-researcher|model-trainer|portfolio|data-engine|backtest|backtest-screening|analyzer} [--render]" >&2
   echo "Run '$0 --help' for details." >&2
   exit 2
 }
@@ -128,6 +130,13 @@ case "$ROLE" in
     RUNTIME_KEY="FACTOR_BACKTEST_RUNTIME"
     IMAGE_PLACEHOLDER="quant-scorer:latest"
     TAG_KEY="QUANT_SCORER_IMAGE_TAG"
+  ;;
+  model-trainer)
+    DEPLOYMENT="quant-model-trainer"
+    MANIFEST_NAME="quant-model-trainer.yaml"
+    RUNTIME_KEY="MODEL_TRAINING_RUNTIME"
+    IMAGE_PLACEHOLDER="quant-model-trainer:latest"
+    TAG_KEY="QUANT_MODEL_TRAINER_IMAGE_TAG"
   ;;
   portfolio)
     DEPLOYMENT="quant-portfolio"
@@ -212,6 +221,11 @@ case "$ROLE" in
     image_repository="$(env_file_get QUANT_ANALYZER_IMAGE_REPOSITORY "$DEPLOY_ENV_FILE")"
     image_repository="${image_repository:-$(env_file_get QUANT_ANALYZER_IMAGE_REPOSITORY "$COMMON_ENV_FILE")}"
     image_repository="${image_repository:-${acr_parent}/quant-analyzer}"
+    ;;
+  model-trainer)
+    image_repository="$(env_file_get QUANT_MODEL_TRAINER_IMAGE_REPOSITORY "$DEPLOY_ENV_FILE")"
+    image_repository="${image_repository:-$(env_file_get QUANT_MODEL_TRAINER_IMAGE_REPOSITORY "$COMMON_ENV_FILE")}"
+    image_repository="${image_repository:-${acr_parent}/quant-model-trainer}"
     ;;
 esac
 
