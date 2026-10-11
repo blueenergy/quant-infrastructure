@@ -13,6 +13,7 @@
 - **Prometheus** (草稿，未真正启用): 监控系统，归于 `monitoring` profile
 - **Grafana** (草稿，未真正启用): 可视化面板，归于 `monitoring` profile
 - **Portainer** (可选): 单机 Docker 容器管理面板
+- **mongo-express** (可选): MongoDB Web 管理，归于 `mongo-express` profile（默认不启动）
 
 ### Kubernetes / K3s（应用栈）
 
@@ -110,6 +111,7 @@ redis-cli -h localhost -p 6379 ping
 | Prometheus | `http://localhost:9090` | 9090 |
 | Grafana | `http://localhost:3000` | 3000 |
 | Portainer | `http://localhost:9000` | 9000 |
+| mongo-express | `http://<host>:8081`（Basic Auth） | 8081 |
 
 ## 🔐 默认凭据
 
@@ -128,6 +130,11 @@ redis-cli -h localhost -p 6379 ping
 **Portainer** (可选):
 - 首次访问 `http://localhost:9000` 时创建管理员账号
 - 使用本机 Docker socket 管理当前服务器上的容器
+
+**mongo-express** (可选):
+- Web 登录：`MONGO_EXPRESS_USER` / `MONGO_EXPRESS_PASSWORD`（`infra/.env`）
+- 使用 Mongo root：`MONGO_USERNAME` / `MONGO_PASSWORD`（只读/写取决于该账号权限）
+- 默认绑定 `0.0.0.0:8081`；公网或未信任网络请防火墙限制来源 IP
 
 ⚠️ **生产环境请务必设置强密码！**
 
@@ -159,6 +166,9 @@ docker compose --profile monitoring up -d
 
 # 启动 Portainer 管理面板（需要 --profile）
 docker compose --profile management up -d portainer
+
+# 启动 mongo-express（需要 MongoDB 已 healthy）
+docker compose --profile mongo-express up -d mongo-express
 
 # 停止服务
 docker compose stop

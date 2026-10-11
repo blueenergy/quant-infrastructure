@@ -212,6 +212,37 @@ services:
     profiles:
       - management
 
+  # ========================
+  # mongo-express（可选 Web 管理 MongoDB）
+  # 默认不启动。必须与 mongodb 使用同一组 -f（例如本机 standalone 要加 -f docker-compose.standalone.yml），
+  # 否则 `compose up` 会按默认 yml 重建 mongodb（复制集 + keyfile），与本机 standalone 不一致。
+  # 示例：docker compose -f docker-compose.yml -f docker-compose.standalone.yml --profile mongo-express up -d mongo-express
+  # 连复制集 PRIMARY 时用 directConnection（与业务 MONGO_URI 一致）。
+  # 宿主机 0.0.0.0 暴露端口（靠 ME_CONFIG_BASICAUTH_* + 防火墙限制访问面）
+  # ========================
+  mongo-express:
+    image: mongo-express:1.0.2-20
+    container_name: quant-mongo-express
+    ports:
+      - "${MONGO_EXPRESS_PORT:-8081}:8081"
+    environment:
+      ME_CONFIG_MONGODB_URL: >-
+        mongodb://${MONGO_USERNAME:-admin}:${MONGO_PASSWORD:-changeme}@mongodb:27017/?authSource=admin&directConnection=true
+      ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_EXPRESS_USER:-admin}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_EXPRESS_PASSWORD:-changeme}
+      ME_CONFIG_MONGODB_ENABLE_ADMIN: "true"
+      ME_CONFIG_SITE_BASEURL: /
+    mem_limit: 128m
+    cpus: "0.25"
+    restart: unless-stopped
+    networks:
+      - quant-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    profiles:
+      - mongo-express
+
 # ========================
 # 数据卷
 # ========================

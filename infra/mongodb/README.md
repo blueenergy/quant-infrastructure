@@ -42,6 +42,21 @@ mongosh "mongodb://admin:<password>@127.0.0.1:27017/?authSource=admin" --eval 'd
 
 `MONGO_PASSWORD` 与业务 `.env` 里 `MONGO_URI` 密码一致（如 `apps/.env` 的 `DOCKER_MONGO_URI`）。
 
+## Web 管理（mongo-express，可选）
+
+宿主机或防火墙封了 **27017** 时，Compass 往往连不上；可在 **跑 Mongo 的那台机** 上起 mongo-express，经 **HTTP + SSH 隧道** 浏览库（容器内走 Docker 网络连 `mongodb:27017`，不依赖对外暴露 27017）。
+
+```bash
+cd quant-infrastructure/infra
+# 在 infra/.env 配置 MONGO_EXPRESS_PASSWORD（Web 登录，与 Mongo 账号无关）
+# ⚠️ 与启动 mongodb 时相同的 -f；本机 standalone 务必带上 docker-compose.standalone.yml
+docker compose -f docker-compose.yml -f docker-compose.standalone.yml --profile mongo-express up -d mongo-express
+```
+
+浏览器：`http://<mongo-host>:8081`（默认 `MONGO_EXPRESS_PORT=8081`），用 `MONGO_EXPRESS_USER` / `MONGO_EXPRESS_PASSWORD` 登录。未信任网络请限制防火墙来源 IP。
+
+停止：`docker compose --profile mongo-express stop mongo-express`
+
 ## 数据卷说明
 
 两种模式默认共用 Compose 卷 `mongodb7_data`。若某卷曾在 **rs0** 下初始化，再切 standalone 有时需单独评估（多数开发机可直接沿用；起不来再考虑备份后换卷）。**不要在生产卷上随意 `rs.initiate` / 删 keyfile 试错的混用。**
