@@ -1,0 +1,103 @@
+# One-shot: materialize production stock_scores panel → S3 + optional quant_ml manifest.
+# Usage (aipoc):
+#   kubectl -n aipoc apply -f quant-ml-materialize-snapshot.yaml
+#   kubectl -n aipoc logs job/quant-ml-materialize-snapshot -f
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: quant-ml-materialize-snapshot
+  labels:
+    app: quant-model-trainer
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: quant-model-trainer
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: materialize
+          image: quant-model-trainer:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -m
+            - quant_model_platform.tools.materialize_snapshot
+            - --index-code
+            - csi1000
+            - --start-date
+            - "20230101"
+            - --end-date
+            - "20251231"
+            - --register-mongo
+          envFrom:
+            - secretRef:
+                name: quant-secrets
+          env:
+            - name: MODEL_TRAINING_RUNTIME
+              value: external_k8s
+            - name: QUANT_ML_DB
+              value: quant_ml
+            - name: QUANT_ML_PARQUET_ROOT
+              value: /tmp/quant_ml/parquet
+            - name: QUANT_ML_PARQUET_BACKEND
+              value: s3
+            - name: QUANT_ML_S3_PREFIX
+              value: quant_ml
+            - name: QUANT_ML_S3_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: PORTFOLIO_RESEARCH_S3_ENDPOINT
+            - name: QUANT_ML_S3_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: PORTFOLIO_RESEARCH_S3_BUCKET
+            - name: QUANT_ML_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: PORTFOLIO_RESEARCH_S3_ACCESS_KEY
+            - name: QUANT_ML_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: PORTFOLIO_RESEARCH_S3_SECRET_KEY
+            - name: QUANT_ML_S3_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: PORTFOLIO_RESEARCH_S3_REGION
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MONGO_URI
+            - name: MONGO_DB
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MONGO_DB
+            - name: DATA_DB_NAME
+              value: quant_data
+          resources:
+            requests:
+              cpu: "2"
+              memory: "8Gi"
+            limits:
+              cpu: "4"
+              memory: "16Gi"
+          volumeMounts:
+            - name: parquet
+              mountPath: /tmp/quant_ml
+      volumes:
+        - name: parquet
+          emptyDir: {}

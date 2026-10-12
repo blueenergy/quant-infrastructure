@@ -102,6 +102,13 @@ spec:
                 secretKeyRef:
                   name: quant-secrets
                   key: MONGO_URI
+            - name: MONGO_DB
+              valueFrom:
+                secretKeyRef:
+                  name: quant-secrets
+                  key: MONGO_DB
+            - name: DATA_DB_NAME
+              value: quant_data
           volumeMounts:
             - name: logs
               mountPath: /app/logs
