@@ -40,6 +40,35 @@ spec:
                   value: quant_ml
                 - name: QUANT_ML_PARQUET_ROOT
                   value: /tmp/quant_ml/parquet
+                - name: QUANT_ML_PARQUET_BACKEND
+                  value: s3
+                - name: QUANT_ML_S3_PREFIX
+                  value: quant_ml
+                - name: QUANT_ML_S3_ENDPOINT
+                  valueFrom:
+                    secretKeyRef:
+                      name: quant-secrets
+                      key: PORTFOLIO_RESEARCH_S3_ENDPOINT
+                - name: QUANT_ML_S3_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: quant-secrets
+                      key: PORTFOLIO_RESEARCH_S3_BUCKET
+                - name: QUANT_ML_S3_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: quant-secrets
+                      key: PORTFOLIO_RESEARCH_S3_ACCESS_KEY
+                - name: QUANT_ML_S3_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: quant-secrets
+                      key: PORTFOLIO_RESEARCH_S3_SECRET_KEY
+                - name: QUANT_ML_S3_REGION
+                  valueFrom:
+                    secretKeyRef:
+                      name: quant-secrets
+                      key: PORTFOLIO_RESEARCH_S3_REGION
               resources:
                 requests:
                   cpu: "1"
