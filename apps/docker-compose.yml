@@ -412,8 +412,8 @@ services:
   # daily/2026-10-10). Host network + WSL mirrored loopback = container reaches
   # the QMT RPC on Windows directly via 127.0.0.1:15609/15626. Configs are
   # machine-local runtime files (gitignored in quant-data-engine), mounted
-  # read-only from the WSL checkout. quote-account-id CLI override pins the
-  # 行情 instance until the JSONs themselves are aligned post-cutover.
+  # read-only from the WSL checkout. quote_account_id 已入 JSON
+  # (8885156549↔15609 quote 端, 2026-10-12 收编), 不再有 CLI override.
   quant-realtime-dayk:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-data-engine:${QUANT_DATA_ENGINE_IMAGE_TAG:-latest}
     container_name: quant-realtime-dayk
@@ -424,7 +424,6 @@ services:
     command: >
       python3 scripts/run_miniqmt_bridge.py
       --config scripts/bigqmt_rpc_bridge.json
-      --quote-account-id 8885156549
       --loop
     env_file:
       - env/common.env
@@ -448,7 +447,6 @@ services:
     command: >
       python3 scripts/run_miniqmt_bridge.py
       --config scripts/bigqmt_rpc_bridge.watchlist_minute_kline.json
-      --quote-account-id 8885156549
       --loop
     env_file:
       - env/common.env
