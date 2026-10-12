@@ -177,10 +177,11 @@ resolve_local_runtime_profiles() {
     export COMPOSE_PROFILES
     log "COMPOSE_PROFILES already set: ${COMPOSE_PROFILES}"
   else
-    local research_runtime factor_backtest_runtime scorer_runtime portfolio_runtime data_engine_runtime backtest_runtime analyzer_runtime configured_profiles
+    local research_runtime factor_backtest_runtime model_training_runtime scorer_runtime portfolio_runtime data_engine_runtime backtest_runtime analyzer_runtime configured_profiles
     local -a profiles=()
     research_runtime="$(_common_env_get PORTFOLIO_RESEARCH_RUNTIME)"
     factor_backtest_runtime="$(_common_env_get FACTOR_BACKTEST_RUNTIME)"
+    model_training_runtime="$(_common_env_get MODEL_TRAINING_RUNTIME)"
     scorer_runtime="$(_common_env_get QUANT_SCORER_RUNTIME)"
     portfolio_runtime="$(_common_env_get QUANT_PORTFOLIO_RUNTIME)"
     data_engine_runtime="$(_common_env_get QUANT_DATA_ENGINE_RUNTIME)"
@@ -189,6 +190,7 @@ resolve_local_runtime_profiles() {
     configured_profiles="$(_common_env_get COMPOSE_PROFILES)"
     research_runtime="${research_runtime:-local_docker}"
     factor_backtest_runtime="${factor_backtest_runtime:-local_docker}"
+    model_training_runtime="${model_training_runtime:-local_docker}"
     scorer_runtime="${scorer_runtime:-local_docker}"
     portfolio_runtime="${portfolio_runtime:-local_docker}"
     data_engine_runtime="${data_engine_runtime:-local_docker}"
@@ -200,6 +202,7 @@ resolve_local_runtime_profiles() {
     else
       [ "$research_runtime" = "local_docker" ] && profiles+=("research-local")
       [ "$factor_backtest_runtime" = "local_docker" ] && profiles+=("factor-research-local")
+      [ "$model_training_runtime" = "local_docker" ] && profiles+=("model-trainer-local")
       [ "$scorer_runtime" = "local_docker" ] && profiles+=("scorer-local")
       [ "$portfolio_runtime" = "local_docker" ] && profiles+=("portfolio-local")
       [ "$data_engine_runtime" = "local_docker" ] && profiles+=("data-engine-local")
@@ -208,7 +211,7 @@ resolve_local_runtime_profiles() {
       local IFS=,
       export COMPOSE_PROFILES="${profiles[*]}"
     fi
-    log "PORTFOLIO_RESEARCH_RUNTIME=${research_runtime} FACTOR_BACKTEST_RUNTIME=${factor_backtest_runtime} QUANT_SCORER_RUNTIME=${scorer_runtime} QUANT_PORTFOLIO_RUNTIME=${portfolio_runtime} QUANT_DATA_ENGINE_RUNTIME=${data_engine_runtime} BACKTEST_WORKER_RUNTIME=${backtest_runtime} QUANT_ANALYZER_RUNTIME=${analyzer_runtime} COMPOSE_PROFILES=${COMPOSE_PROFILES:-<empty>}"
+    log "PORTFOLIO_RESEARCH_RUNTIME=${research_runtime} FACTOR_BACKTEST_RUNTIME=${factor_backtest_runtime} MODEL_TRAINING_RUNTIME=${model_training_runtime} QUANT_SCORER_RUNTIME=${scorer_runtime} QUANT_PORTFOLIO_RUNTIME=${portfolio_runtime} QUANT_DATA_ENGINE_RUNTIME=${data_engine_runtime} BACKTEST_WORKER_RUNTIME=${backtest_runtime} QUANT_ANALYZER_RUNTIME=${analyzer_runtime} COMPOSE_PROFILES=${COMPOSE_PROFILES:-<empty>}"
   fi
   apply_mcp_profile
   log "COMPOSE_PROFILES after mcp gate: ${COMPOSE_PROFILES:-<empty>}"
@@ -220,6 +223,7 @@ _service_external_k8s() {
   case "$svc" in
     quant-researcher) runtime="$(_common_env_get PORTFOLIO_RESEARCH_RUNTIME)" ;;
     quant-factor-researcher) runtime="$(_common_env_get FACTOR_BACKTEST_RUNTIME)" ;;
+    quant-model-trainer) runtime="$(_common_env_get MODEL_TRAINING_RUNTIME)" ;;
     quant-scorer) runtime="$(_common_env_get QUANT_SCORER_RUNTIME)" ;;
     quant-portfolio) runtime="$(_common_env_get QUANT_PORTFOLIO_RUNTIME)" ;;
     quant-data-engine) runtime="$(_common_env_get QUANT_DATA_ENGINE_RUNTIME)" ;;
@@ -236,6 +240,7 @@ _service_compose_profile() {
   case "$svc" in
     quant-researcher) echo "research-local" ;;
     quant-factor-researcher) echo "factor-research-local" ;;
+    quant-model-trainer) echo "model-trainer-local" ;;
     quant-scorer) echo "scorer-local" ;;
     quant-portfolio) echo "portfolio-local" ;;
     quant-data-engine) echo "data-engine-local" ;;
@@ -250,6 +255,7 @@ _runtime_env_key_for_service() {
   case "$svc" in
     quant-researcher) echo "PORTFOLIO_RESEARCH_RUNTIME" ;;
     quant-factor-researcher) echo "FACTOR_BACKTEST_RUNTIME" ;;
+    quant-model-trainer) echo "MODEL_TRAINING_RUNTIME" ;;
     quant-scorer) echo "QUANT_SCORER_RUNTIME" ;;
     quant-portfolio) echo "QUANT_PORTFOLIO_RUNTIME" ;;
     quant-data-engine) echo "QUANT_DATA_ENGINE_RUNTIME" ;;
@@ -274,7 +280,7 @@ filter_services_for_external_runtimes() {
 
 stop_local_services_for_external_runtimes() {
   local svc profile runtime_key any_external=0
-  for svc in quant-researcher quant-scorer quant-portfolio quant-data-engine backtest-worker backtest-screening quant-analyzer; do
+  for svc in quant-researcher quant-factor-researcher quant-model-trainer quant-scorer quant-portfolio quant-data-engine backtest-worker backtest-screening quant-analyzer; do
     if _service_external_k8s "$svc"; then
       any_external=1
       profile="$(_service_compose_profile "$svc")"

@@ -114,3 +114,14 @@ services:
         reservations:
           cpus: "0"
           memory: 256m
+
+  # Smaller hosts: synthetic MVP fits in less RAM; raise limits for large Parquet.
+  quant-model-trainer:
+    deploy:
+      resources:
+        limits:
+          cpus: "${MODEL_TRAINER_CPU_LIMIT:-2}"
+          memory: "${MODEL_TRAINER_MEM_LIMIT:-8g}"
+        reservations:
+          cpus: "0"
+          memory: 256m

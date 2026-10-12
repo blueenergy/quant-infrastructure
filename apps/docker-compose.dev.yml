@@ -443,6 +443,47 @@ services:
         max-size: "50m"
         max-file: "3"
 
+  # ML training worker (quant_ml) — builds from monorepo quant-model-platform
+  quant-model-trainer:
+    build:
+      context: ../../quant-model-platform
+      dockerfile: Dockerfile
+    container_name: quant-model-trainer
+    profiles: [ "model-trainer-local" ]
+    env_file:
+      - path: ../../stock-scoring-system/.env
+        required: false
+    environment:
+      - MONGO_URI=${DOCKER_MONGO_URI:-mongodb://quant-mongodb:27017/}
+      - QUANT_ML_DB=${QUANT_ML_DB:-quant_ml}
+      - QUANT_ML_PARQUET_ROOT=/data/quant_ml/parquet
+      - MODEL_TRAINING_RUNTIME=local_docker
+      - MODEL_TRAINING_LOOP_LIMIT=${MODEL_TRAINING_LOOP_LIMIT:-1}
+      - MODEL_TRAINING_STALE_MINUTES=${MODEL_TRAINING_STALE_MINUTES:-120}
+      - MODEL_TRAINING_LOOP_INTERVAL_SECONDS=${MODEL_TRAINING_LOOP_INTERVAL_SECONDS:-5}
+      - TZ=Asia/Shanghai
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    volumes:
+      - ../../quant-model-platform/logs/trainer:/app/logs
+      - ./data/quant_ml:/data/quant_ml
+    networks:
+      - quant-network
+    deploy:
+      resources:
+        limits:
+          cpus: "${MODEL_TRAINER_CPU_LIMIT:-4}"
+          memory: "${MODEL_TRAINER_MEM_LIMIT:-16g}"
+        reservations:
+          cpus: "0"
+          memory: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
   # 因子回测 (Alpha158 筛选 loop)
   # 独立于 quant-researcher: 单个因子任务要跑 30~75 分钟并占用约 5GB,
   # 混在同一个 loop 里会把排在后面的组合研究任务全部堵死。

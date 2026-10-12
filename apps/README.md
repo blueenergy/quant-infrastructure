@@ -254,6 +254,39 @@ s3cmd -c deployment/credentials/s3cfg mb s3://aipoc
   `PORTFOLIO_RESEARCH_WORKER_ID` from the Pod name). Prefer replicas over
   raising sweep workers to limit OOM risk.
 
+## Model training runtime (`quant_ml`)
+
+Training jobs live in Mongo (`quant_ml.model_training_jobs`). Workers use the
+**quant-model-trainer** image (not quant-scorer). Parquet snapshots default to
+`./data/quant_ml` on the Compose host (`QUANT_ML_PARQUET_ROOT` inside the
+container). Pick one worker location per environment.
+
+| `MODEL_TRAINING_RUNTIME` | Compose `quant-model-trainer` | Workers |
+|---|---|---|
+| `local_docker` (default) | Profile `model-trainer-local` | This host |
+| `external_k8s` | Not started | `k8s/.../quant-model-trainer.yaml` |
+
+**Local Docker**
+
+```bash
+cp env/quant-model-trainer.env.example env/quant-model-trainer.env
+# common.env: MODEL_TRAINING_RUNTIME=local_docker
+
+./deploy.sh quant-model-trainer
+# or: COMPOSE_PROFILES=model-trainer-local docker compose up -d quant-model-trainer
+```
+
+**External K8s**
+
+```bash
+# common.env on the Compose host:
+MODEL_TRAINING_RUNTIME=external_k8s
+
+K8S_NAMESPACE=aipoc k8s/quant-finance-stack/deploy-quant-role.sh model-trainer
+```
+
+Image tag: `QUANT_MODEL_TRAINER_IMAGE_TAG` in `apps/versions.env`.
+
 **Env model (dev only):**
 
 | Layer | Purpose |

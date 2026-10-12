@@ -306,6 +306,47 @@ services:
         max-size: "50m"
         max-file: "3"
 
+  # ML training queue worker (quant_ml). Uses the quant-model-trainer image, not
+  # quant-scorer. Set MODEL_TRAINING_RUNTIME=external_k8s on hosts that run the
+  # K8s Deployment so this profile is not started against the same queue.
+  quant-model-trainer:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-model-trainer:${QUANT_MODEL_TRAINER_IMAGE_TAG:-latest}
+    container_name: quant-model-trainer
+    profiles: ["model-trainer-local"]
+    restart: unless-stopped
+    env_file:
+      - env/common.env
+      - env/quant-model-trainer.env
+    environment:
+      - TZ=Asia/Shanghai
+      - MODEL_TRAINING_RUNTIME=local_docker
+      - QUANT_ML_DB=${QUANT_ML_DB:-quant_ml}
+      - QUANT_ML_PARQUET_ROOT=/data/quant_ml/parquet
+      - MODEL_TRAINING_LOOP_LIMIT=${MODEL_TRAINING_LOOP_LIMIT:-1}
+      - MODEL_TRAINING_STALE_MINUTES=${MODEL_TRAINING_STALE_MINUTES:-120}
+      - MODEL_TRAINING_LOOP_INTERVAL_SECONDS=${MODEL_TRAINING_LOOP_INTERVAL_SECONDS:-5}
+      - MODEL_TRAINING_WORKER_ID=${MODEL_TRAINING_WORKER_ID:-quant-model-trainer}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./logs/quant-model-trainer:/app/logs
+      - ./data/quant_ml:/data/quant_ml
+    networks:
+      - quant-net
+    deploy:
+      resources:
+        limits:
+          cpus: "${MODEL_TRAINER_CPU_LIMIT:-4}"
+          memory: "${MODEL_TRAINER_MEM_LIMIT:-32g}"
+        reservations:
+          cpus: "0"
+          memory: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
   # [MIGRATED] Portfolio planning and paper-trading role from the
   # stock-scoring-system image. It owns plan-generation polling and paper
   # execution/mark-to-market cron jobs.
