@@ -69,6 +69,13 @@ spec:
                     secretKeyRef:
                       name: quant-secrets
                       key: PORTFOLIO_RESEARCH_S3_REGION
+                # JSON array: [{"source_job_id":"<hs300-job>"},{"source_job_id":"<a500-job>"}]
+                - name: MODEL_SHADOW_PROFILES
+                  valueFrom:
+                    secretKeyRef:
+                      name: quant-model-shadow-profiles
+                      key: MODEL_SHADOW_PROFILES
+                      optional: true
               resources:
                 requests:
                   cpu: "1"
