@@ -1,7 +1,11 @@
 # One-shot: materialize production stock_scores panel → S3 + optional quant_ml manifest.
-# Usage (aipoc):
-#   kubectl -n aipoc apply -f quant-ml-materialize-snapshot.yaml
-#   kubectl -n aipoc logs job/quant-ml-materialize-snapshot -f
+#
+# Do NOT apply this file raw: image is placeholder quant-model-trainer:latest (ImagePullBackOff).
+# Use the wrapper (sets ACR tag from apps/versions.env):
+#   k8s/quant-finance-stack/jobs/run-quant-ml-materialize-snapshot.sh --wait
+# Or:
+#   kubectl -n aipoc delete job quant-ml-materialize-snapshot --ignore-not-found
+#   sed 's|quant-model-trainer:latest|crpi-.../quant-model-trainer:sha-932eedf|' quant-ml-materialize-snapshot.yaml | kubectl apply -f -
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -22,16 +26,27 @@ spec:
         runAsUser: 1000
         runAsGroup: 1000
         fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: materialize
           image: quant-model-trainer:latest
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
           command:
             - python
             - -m
             - quant_model_platform.tools.materialize_snapshot
             - --index-code
-            - csi1000
+            - hs300
             - --start-date
             - "20230101"
             - --end-date
