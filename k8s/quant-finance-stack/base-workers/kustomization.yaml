@@ -8,6 +8,7 @@ resources:
   - quant-factor-researcher.yaml
   - quant-model-trainer.yaml
   - quant-model-shadow-cronjob.yaml
+  - quant-ml-daily-shadow-pipeline-cronjob.yaml
   - quant-portfolio.yaml
   - quant-data-engine.yaml
   - quant-data-engine-logs-pvc.yaml

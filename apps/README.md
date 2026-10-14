@@ -176,6 +176,23 @@ from `apps/versions.env`. The default Pod uses one replica, a `Recreate`
 strategy, `MAX_WORKERS=12`, and a 12-CPU/16-GiB limit. Do not scale replicas
 without first adding a distributed scoring lock or explicit work sharding.
 
+## Daily ML shadow pipeline (after scorer)
+
+Weekday **20:00** (Asia/Shanghai), CronJob `quant-ml-daily-shadow-pipeline` materializes
+**canonical** Parquet (`hs300` / `a500` `current.parquet`) from `stock_scores`, then runs
+Shadow into `quant_ml.model_predictions`. It uses the **quant-model-trainer** image, not
+quant-data-engine.
+
+Upstream: **quant-scorer ~19:00** (above). Market data crons live in
+`quant-data-engine/crontab.txt` (15:00–18:00+). See the combined timeline in
+`k8s/quant-finance-stack/jobs/README.md`.
+
+```bash
+cd k8s/quant-finance-stack/jobs
+./run-daily-ml-shadow-pipeline.sh --apply-cron
+./run-daily-ml-shadow-pipeline.sh --run-once   # manual
+```
+
 ## Portfolio research runtime
 
 Research jobs live in Mongo (`quant_trading.portfolio_research_jobs`). The

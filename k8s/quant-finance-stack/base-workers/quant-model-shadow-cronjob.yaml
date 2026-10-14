@@ -7,6 +7,8 @@ metadata:
   labels:
     app: quant-model-shadow
 spec:
+  # Superseded by quant-ml-daily-shadow-pipeline (20:00, materialize current + shadow).
+  suspend: true
   schedule: "30 18 * * 1-5"
   timeZone: Asia/Shanghai
   concurrencyPolicy: Forbid

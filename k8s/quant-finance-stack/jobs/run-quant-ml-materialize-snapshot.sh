@@ -18,6 +18,7 @@ DEFAULT_REPO="crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongq
 INDEX_CODE="${INDEX_CODE:-hs300}"
 START_DATE="${START_DATE:-20230101}"
 END_DATE="${END_DATE:-20251231}"
+CANONICAL=0
 WAIT=0
 DRY_RUN=0
 IMAGE_OVERRIDE="${IMAGE:-}"
@@ -35,6 +36,7 @@ while [ $# -gt 0 ]; do
     --index-code) INDEX_CODE="${2:?}"; shift 2 ;;
     --start-date) START_DATE="${2:?}"; shift 2 ;;
     --end-date) END_DATE="${2:?}"; shift 2 ;;
+    --canonical) CANONICAL=1; shift ;;
     --wait) WAIT=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --image) IMAGE_OVERRIDE="${2:?}"; shift 2 ;;

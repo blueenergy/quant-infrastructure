@@ -1,0 +1,105 @@
+# Weekday pipeline after quant-scorer (~19:00): materialize hs300/a500 current → shadow.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: quant-ml-daily-shadow-pipeline
+  labels:
+    app: quant-ml-daily-shadow-pipeline
+spec:
+  schedule: "0 20 * * 1-5"
+  timeZone: Asia/Shanghai
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: pipeline
+              image: quant-model-trainer:latest
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  python -m quant_model_platform.tools.materialize_snapshot \
+                    --index-code hs300 --start-date 20230101 --end-date latest \
+                    --canonical --register-mongo
+                  python -m quant_model_platform.tools.materialize_snapshot \
+                    --index-code a500 --start-date 20230101 --end-date latest \
+                    --canonical --register-mongo
+                  python -m quant_model_platform.workers.shadow_loop --once
+              envFrom:
+                - secretRef:
+                    name: quant-secrets
+              env:
+                - name: TZ
+                  value: Asia/Shanghai
+                - name: HOME
+                  value: /tmp
+                - name: MODEL_TRAINING_RUNTIME
+                  value: external_k8s
+                - name: QUANT_ML_DB
+                  value: quant_ml
+                - name: QUANT_ML_PARQUET_ROOT
+                  value: /tmp/quant_ml/parquet
+                - name: QUANT_ML_PARQUET_BACKEND
+                  value: s3
+                - name: QUANT_ML_S3_PREFIX
+                  value: quant_ml
+                - name: MODEL_SHADOW_PARQUET_RESOLUTION
+                  value: canonical
+                - name: QUANT_ML_S3_ENDPOINT
+                  valueFrom:
+                    secretKeyRef:
+                      name: quant-secrets
+                      key: PORTFOLIO_RESEARCH_S3_ENDPOINT
+                - name: QUANT_ML_S3_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: quant-secrets
+                      key: PORTFOLIO_RESEARCH_S3_BUCKET
+                - name: QUANT_ML_S3_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: quant-secrets
+                      key: PORTFOLIO_RESEARCH_S3_ACCESS_KEY
+                - name: QUANT_ML_S3_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: quant-secrets
+                      key: PORTFOLIO_RESEARCH_S3_SECRET_KEY
+                - name: QUANT_ML_S3_REGION
+                  valueFrom:
+                    secretKeyRef:
+                      name: quant-secrets
+                      key: PORTFOLIO_RESEARCH_S3_REGION
+                - name: MODEL_SHADOW_PROFILES
+                  valueFrom:
+                    secretKeyRef:
+                      name: quant-model-shadow-profiles
+                      key: MODEL_SHADOW_PROFILES
+                      optional: true
+              securityContext:
+                allowPrivilegeEscalation: false
+                runAsNonRoot: true
+                runAsUser: 1000
+                runAsGroup: 1000
+                capabilities:
+                  drop: ["ALL"]
+                seccompProfile:
+                  type: RuntimeDefault
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: "4Gi"
+                limits:
+                  cpu: "2"
+                  memory: "8Gi"
