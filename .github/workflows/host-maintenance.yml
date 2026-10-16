@@ -1,0 +1,132 @@
+name: Host maintenance
+
+# ============================================================================
+# Disk maintenance for the Compose production host.
+#
+# Why this exists: deploy.yml SSHes in, takes the host lock and then dies at
+# `git fetch` with `fatal: write error: No space left on device`. The SSH path
+# itself is fine -- only the target disk is full. That is a chicken-and-egg
+# problem for a git-delivered fix, so the cleanup script here travels to the
+# host over stdin (`bash -s <<'EOF'`), exactly like the deploy step does, and
+# never needs to land on the filesystem first.
+#
+# Safe by construction:
+#   - Volumes are NEVER touched (MongoDB lives in one) -- no `--volumes`, and
+#     no `docker system prune`, which is one flag away from a data disaster.
+#   - Images are only removed when no container references them, and only once
+#     they are a week old, so a rollback target survives the run.
+#   - Containers are only removed once they have been stopped for a day.
+#
+# Triggers: workflow_dispatch only. This never runs on push.
+#
+# Required secrets: VOLC_SSH_KEY, VOLC_HOST, VOLC_USER
+# (Same set the deploy job uses. ALIYUN_* are not needed -- this pulls nothing.)
+#
+# Optional repo variable: INFRA_REMOTE_DIR (default: ~/trading/quant-infrastructure)
+# ============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_age_hours:
+        description: "Only prune unused images older than this many hours (168 = 1 week)"
+        required: false
+        default: "168"
+      journal_keep:
+        description: "Keep this much journald history (e.g. 200M)"
+        required: false
+        default: "200M"
+
+permissions:
+  contents: read
+
+jobs:
+  disk:
+    name: Diagnose and reclaim disk
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      IMAGE_AGE_HOURS: ${{ inputs.image_age_hours || '168' }}
+      JOURNAL_KEEP: ${{ inputs.journal_keep || '200M' }}
+      INFRA_REMOTE_DIR: ${{ vars.INFRA_REMOTE_DIR || '~/trading/quant-infrastructure' }}
+    steps:
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VOLC_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Best-effort, same as the deploy job: StrictHostKeyChecking=no below
+          # means a failed keyscan is not fatal.
+          ssh-keyscan -T 10 "${{ secrets.VOLC_HOST }}" >> ~/.ssh/known_hosts \
+            || echo "ssh-keyscan failed (non-fatal)"
+
+      - name: Diagnose and reclaim
+        timeout-minutes: 25
+        run: |
+          ssh -i ~/.ssh/id_ed25519 \
+            -o BatchMode=yes \
+            -o ConnectTimeout=30 \
+            -o ConnectionAttempts=3 \
+            -o StrictHostKeyChecking=no \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=6 \
+            "${{ secrets.VOLC_USER }}@${{ secrets.VOLC_HOST }}" \
+            "IMAGE_AGE_HOURS='${IMAGE_AGE_HOURS}' \
+             JOURNAL_KEEP='${JOURNAL_KEEP}' \
+             INFRA_REMOTE_DIR='${INFRA_REMOTE_DIR}' bash -s" <<'EOF'
+          set -uo pipefail
+          # Deliberately NOT `set -e`: the whole point of this run is that the
+          # disk is full, so individual probes and prunes may fail. Each step
+          # reports for itself and the run continues to the end -- a partial
+          # cleanup that we can read is worth more than an early abort.
+
+          echo "===== BEFORE ====="
+          df -h / /var/lib/docker 2>/dev/null || df -h /
+          echo
+          echo "----- inodes -----"
+          df -i / | tail -2
+          echo
+          echo "----- docker system df -----"
+          docker system df 2>&1 || echo "  (docker unavailable)"
+          echo
+          echo "----- /var/lib/docker breakdown -----"
+          sudo -n du -xsh /var/lib/docker/* 2>/dev/null | sort -rh | head -12 \
+            || du -xsh /var/lib/docker/* 2>/dev/null | sort -rh | head -12 \
+            || echo "  (cannot read /var/lib/docker without sudo)"
+          echo
+          echo "----- \$HOME breakdown -----"
+          du -xsh "$HOME"/* 2>/dev/null | sort -rh | head -12
+          echo
+          echo "----- counts -----"
+          echo "images    : $(docker images -q 2>/dev/null | wc -l)"
+          echo "containers: $(docker ps -aq 2>/dev/null | wc -l) total, $(docker ps -q 2>/dev/null | wc -l) running"
+          echo "volumes   : $(docker volume ls -q 2>/dev/null | wc -l)  (NEVER touched by this run)"
+          echo
+          echo "----- biggest container json logs -----"
+          sudo -n find /var/lib/docker/containers -name '*-json.log' -size +50M \
+            -printf '%s\t%p\n' 2>/dev/null | sort -rn | head -10 \
+            || echo "  (needs sudo; compose caps these at 50m x 3 anyway)"
+          echo
+          echo "===== CLEANUP ====="
+          echo "[1/5] dangling images"
+          docker image prune -f 2>&1 | tail -3
+          echo "[2/5] build cache"
+          docker builder prune -f 2>&1 | tail -3
+          echo "[3/5] containers stopped for over 24h"
+          docker container prune -f --filter "until=24h" 2>&1 | tail -3
+          echo "[4/5] journald (keep ${JOURNAL_KEEP})"
+          sudo -n journalctl --vacuum-size="${JOURNAL_KEEP}" 2>&1 | tail -3 \
+            || journalctl --vacuum-size="${JOURNAL_KEEP}" 2>&1 | tail -3 \
+            || echo "  (skipped: needs privileges)"
+          echo "[5/5] unused images older than ${IMAGE_AGE_HOURS}h"
+          echo "      (images a running container uses are never candidates)"
+          docker image prune -a -f --filter "until=${IMAGE_AGE_HOURS}h" 2>&1 | tail -5
+          echo
+          echo "===== AFTER ====="
+          df -h / /var/lib/docker 2>/dev/null || df -h /
+          echo
+          docker system df 2>&1 || true
+          echo
+          echo "===== still running ====="
+          docker ps --format '{{.Names}}\t{{.Image}}\t{{.Status}}' | sort
+          EOF
