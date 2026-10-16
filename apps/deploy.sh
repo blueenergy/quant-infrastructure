@@ -351,14 +351,13 @@ prune_release_images() {
 
   local referenced foreign_tagged
   referenced="$(docker ps -aq | xargs -r docker inspect --format '{{.Image}}' 2>/dev/null | sort -u || true)"
-  # `docker rmi <id>` drops every tag on the image, not only the sha-* one the
-  # filter matched. So an image that also carries a `:latest` convenience tag
-  # is left alone -- that tag is not ours to remove.
+  # Removing by tag drops only that tag, so an image that also carries a
+  # `:latest` convenience tag is left alone -- that tag is not ours to remove.
   foreign_tagged="$(docker images --no-trunc --format '{{.ID}} {{.Tag}}' \
                       | awk '$2 !~ /^sha-/ {print $1}' | sort -u)"
 
-  local id date time
-  local -a doomed=()
+  local id date time tag
+  local -a doomed=() targets=()
   while read -r id date time _; do
     [ -n "${id:-}" ] || continue
     # CreatedAt is "YYYY-MM-DD HH:MM:SS +ZZZZ TZ". Joining date and time with a
@@ -367,6 +366,16 @@ prune_release_images() {
     case "$referenced" in *"$id"*) continue ;; esac
     case "$foreign_tagged" in *"$id"*) continue ;; esac
     doomed+=("$id")
+    # Remove by tag, not by image id. Every release carries the ACR tag *and* a
+    # ghcr.io relay tag, and `docker rmi <id>` refuses an image "referenced in
+    # multiple repositories" without --force. Removing by id therefore reclaimed
+    # nothing for exactly those images while the run still logged success -- the
+    # same zero-reclaim-while-green failure this function exists to end. The
+    # filter above matched only the ACR tag, so the rest are collected here;
+    # foreign_tagged has already established they are all sha-* release tags.
+    while IFS= read -r tag; do
+      [ -n "$tag" ] && targets+=("$tag")
+    done < <(docker image inspect --format '{{range .RepoTags}}{{.}}{{"\n"}}{{end}}' "$id")
   done < <(docker images --no-trunc \
              --filter "reference=${ACR_REGISTRY}/wukongquant/*:sha-*" \
              --format '{{.ID}} {{.CreatedAt}}')
@@ -377,7 +386,7 @@ prune_release_images() {
   fi
   log "  ${#doomed[@]} superseded release image(s) older than ${IMAGE_KEEP_HOURS}h"
   if [ "$dry_run" = "--dry-run" ]; then
-    printf '    %s\n' "${doomed[@]}"
+    printf '    %s\n' "${targets[@]}"
     return 0
   fi
   # Report the delta, not just the intent. The bug this replaced was a prune
@@ -385,7 +394,7 @@ prune_release_images() {
   # the log needs a number that can read 0 and be noticed.
   local before after
   before="$(docker images -q | wc -l)"
-  timeout 120 docker rmi "${doomed[@]}" >/dev/null 2>&1 || true
+  timeout 120 docker rmi "${targets[@]}" >/dev/null 2>&1 || true
   after="$(docker images -q | wc -l)"
   log "  images: ${before} -> ${after}"
 }
