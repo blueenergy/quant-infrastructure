@@ -26,6 +26,14 @@ name: Host maintenance
 # ============================================================================
 
 on:
+  schedule:
+    # Weekly safety net. apps/deploy.sh now prunes its own superseded images
+    # (IMAGE_KEEP_HOURS, default 48), so in steady state this run finds little.
+    # It is here for what the deploy path structurally cannot catch: a burst of
+    # deploys that ages past its window, images pulled outside deploy.sh, or a
+    # long stretch with no deploys at all. Sunday 19:17 UTC = Monday 03:17 CST,
+    # clear of A-share hours.
+    - cron: "17 19 * * 0"
   workflow_dispatch:
     inputs:
       image_age_hours:
@@ -75,6 +83,12 @@ jobs:
              JOURNAL_KEEP='${JOURNAL_KEEP}' \
              INFRA_REMOTE_DIR='${INFRA_REMOTE_DIR}' bash -s" <<'EOF'
           set -uo pipefail
+          # Re-apply the defaults here, not only in the workflow env: on a
+          # `schedule` event the `inputs` context is unset, so an empty
+          # IMAGE_AGE_HOURS would reach us and `--filter "until=h"` would fail
+          # silently. Cheap insurance against the whole class.
+          IMAGE_AGE_HOURS="${IMAGE_AGE_HOURS:-168}"
+          JOURNAL_KEEP="${JOURNAL_KEEP:-200M}"
           # Deliberately NOT `set -e`: the whole point of this run is that the
           # disk is full, so individual probes and prunes may fail. Each step
           # reports for itself and the run continues to the end -- a partial

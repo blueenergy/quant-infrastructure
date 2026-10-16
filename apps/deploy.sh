@@ -18,6 +18,8 @@
 # Optional env:
 #   ACR_REGISTRY  (default: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com)
 #   COMPOSE_WAIT  (default: 1 -> pass --wait to `up`)
+#   IMAGE_KEEP_HOURS (default: 48 -> how long a superseded image stays on disk
+#                    as a rollback target before the post-deploy prune drops it)
 #
 # MCP (quant-mcp-read / quant-mcp-actions) uses Compose profile `mcp`.
 # deploy.sh enables it by default except COMPOSE_HOST_PROFILE=115.
@@ -29,6 +31,7 @@ cd "$SCRIPT_DIR"
 
 ACR_REGISTRY="${ACR_REGISTRY:-crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com}"
 COMPOSE_WAIT="${COMPOSE_WAIT:-1}"
+IMAGE_KEEP_HOURS="${IMAGE_KEEP_HOURS:-48}"
 SERVICES=()
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S %z')] $*"; }
@@ -329,6 +332,64 @@ run_hook() {
   fi
 }
 
+# Drop superseded release images, keeping a rollback window.
+#
+# Scoped to ${ACR_REGISTRY}/wukongquant/*:sha-* on purpose. A blanket
+# `docker image prune -a` also takes host-built images that merely happen to be
+# idle, and this host builds some -- a rebuild there is the 90-minute gamble
+# that pushing to ACR exists to avoid. Everything in scope here came off the
+# registry, so it can always come off it again; nothing here needs a rebuild.
+#
+# Two guards, both conservative:
+#   - only images older than IMAGE_KEEP_HOURS, so a fresh rollback target stays
+#   - never an image any container references, running *or* stopped, since a
+#     stopped container may yet be started back into its image
+prune_release_images() {
+  local dry_run="${1:-}"
+  local cutoff
+  cutoff="$(date -d "-${IMAGE_KEEP_HOURS} hours" '+%Y-%m-%dT%H:%M:%S')"
+
+  local referenced foreign_tagged
+  referenced="$(docker ps -aq | xargs -r docker inspect --format '{{.Image}}' 2>/dev/null | sort -u || true)"
+  # `docker rmi <id>` drops every tag on the image, not only the sha-* one the
+  # filter matched. So an image that also carries a `:latest` convenience tag
+  # is left alone -- that tag is not ours to remove.
+  foreign_tagged="$(docker images --no-trunc --format '{{.ID}} {{.Tag}}' \
+                      | awk '$2 !~ /^sha-/ {print $1}' | sort -u)"
+
+  local id date time
+  local -a doomed=()
+  while read -r id date time _; do
+    [ -n "${id:-}" ] || continue
+    # CreatedAt is "YYYY-MM-DD HH:MM:SS +ZZZZ TZ". Joining date and time with a
+    # T makes both sides ISO, so the comparison can just be lexical.
+    [ "${date}T${time}" \< "$cutoff" ] || continue
+    case "$referenced" in *"$id"*) continue ;; esac
+    case "$foreign_tagged" in *"$id"*) continue ;; esac
+    doomed+=("$id")
+  done < <(docker images --no-trunc \
+             --filter "reference=${ACR_REGISTRY}/wukongquant/*:sha-*" \
+             --format '{{.ID}} {{.CreatedAt}}')
+
+  if [ "${#doomed[@]}" -eq 0 ]; then
+    log "  nothing superseded older than ${IMAGE_KEEP_HOURS}h"
+    return 0
+  fi
+  log "  ${#doomed[@]} superseded release image(s) older than ${IMAGE_KEEP_HOURS}h"
+  if [ "$dry_run" = "--dry-run" ]; then
+    printf '    %s\n' "${doomed[@]}"
+    return 0
+  fi
+  # Report the delta, not just the intent. The bug this replaced was a prune
+  # that printed a success line every run while reclaiming exactly nothing, so
+  # the log needs a number that can read 0 and be noticed.
+  local before after
+  before="$(docker images -q | wc -l)"
+  timeout 120 docker rmi "${doomed[@]}" >/dev/null 2>&1 || true
+  after="$(docker images -q | wc -l)"
+  log "  images: ${before} -> ${after}"
+}
+
 main() {
   SERVICES=("$@")
   require_files
@@ -408,8 +469,13 @@ main() {
   log "Deployed containers:"
   "${COMPOSE[@]}" ps
 
-  log "Pruning dangling images"
-  timeout 120 docker image prune -f || true
+  # The old line here was `docker image prune -f`, which removes only *dangling*
+  # images. Every release carries a sha-* tag, so a superseded one is never
+  # dangling: that command deleted nothing, printed "Total reclaimed space: 0B"
+  # and left the deploy green. That silent no-op is how this host's disk
+  # reached 100% and stalled deploys at `git fetch` on 2026-10-16.
+  log "Pruning superseded release images (keeping ${IMAGE_KEEP_HOURS}h)"
+  prune_release_images
 
   log "Deploy finished"
 }
