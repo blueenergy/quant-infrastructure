@@ -20,6 +20,9 @@
 #   COMPOSE_WAIT  (default: 1 -> pass --wait to `up`)
 #   IMAGE_KEEP_HOURS (default: 48 -> how long a superseded image stays on disk
 #                    as a rollback target before the post-deploy prune drops it)
+#   DISK_ALERT_PCT   (default: 85 -> warn when / is at or above this after the
+#                    prune. 2026-10-16: this host filled to 100%, every deploy
+#                    died at `git fetch`, and the only signal was a green log)
 #
 # MCP (quant-mcp-read / quant-mcp-actions) uses Compose profile `mcp`.
 # deploy.sh enables it by default except COMPOSE_HOST_PROFILE=115.
@@ -32,9 +35,19 @@ cd "$SCRIPT_DIR"
 ACR_REGISTRY="${ACR_REGISTRY:-crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com}"
 COMPOSE_WAIT="${COMPOSE_WAIT:-1}"
 IMAGE_KEEP_HOURS="${IMAGE_KEEP_HOURS:-48}"
+DISK_ALERT_PCT="${DISK_ALERT_PCT:-85}"
 SERVICES=()
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S %z')] $*"; }
+
+# One sentence, two lines: the plain one is what auto_update.log keeps on the
+# local cron path, the `::warning` one is what GitHub renders as an annotation
+# (the runner parses workflow commands out of the step's stdout, SSH included).
+#
+# A warning is deliberately NOT a non-zero exit. By the time either of these
+# fires the rollout has already succeeded, and failing the job here would page
+# the same DingTalk robot with "deploy failed" -- a lie about what the host did.
+warn() { log "WARN: $2"; echo "::warning title=$1::$2"; }
 
 # Read KEY=value from env/common.env without sourcing the whole secrets file.
 # Must stay above the COMPOSE assignment below, which calls it.
@@ -392,11 +405,42 @@ prune_release_images() {
   # Report the delta, not just the intent. The bug this replaced was a prune
   # that printed a success line every run while reclaiming exactly nothing, so
   # the log needs a number that can read 0 and be noticed.
-  local before after
+  local before after survived=0 id
   before="$(docker images -q | wc -l)"
   timeout 120 docker rmi "${targets[@]}" >/dev/null 2>&1 || true
   after="$(docker images -q | wc -l)"
   log "  images: ${before} -> ${after}"
+
+  # ...and a number nobody reads is not a closed loop, so give it a verdict.
+  # "Matched N images, removed none" is exactly the 2026-10-16 shape: rmi
+  # refuses an image referenced by several repositories, the run logged success
+  # anyway, and the host filled up over the following days. Counted by
+  # re-inspecting the ids we aimed at rather than by the delta above, because
+  # `docker images -q` counts rows and a tag-only removal can leave it flat.
+  for id in "${doomed[@]}"; do
+    if docker image inspect "$id" >/dev/null 2>&1; then
+      survived=$((survived + 1))
+    fi
+  done
+  if [ "$survived" -gt 0 ]; then
+    warn "release prune freed nothing on $(hostname)" \
+      "${survived} of ${#doomed[@]} superseded release image(s) survived docker rmi (images ${before} -> ${after}); the prune is a silent no-op again -- check the tags it aimed at"
+  fi
+}
+
+# The other half of the same lesson: a prune that ran is not a disk that is fine.
+# The threshold is on the stock, not on the flow -- a deploy that finds nothing
+# to prune is the normal steady state and must stay quiet, while a host that is
+# nearly full is a countdown regardless of how healthy the prune looks.
+check_disk_pressure() {
+  local used avail
+  used="$(df --output=pcent / 2>/dev/null | tail -1 | tr -dc '0-9' || true)"
+  [ -n "$used" ] || return 0
+  if [ "$used" -ge "$DISK_ALERT_PCT" ]; then
+    avail="$(df -h --output=avail / 2>/dev/null | tail -1 | tr -d ' ' || true)"
+    warn "disk pressure on $(hostname)" \
+      "/ is ${used}% used (${avail:-?} free) after pruning to ${IMAGE_KEEP_HOURS}h; deploys start dying at 100% -- run the Host maintenance workflow, which can reclaim what a deploy must not touch"
+  fi
 }
 
 main() {
@@ -485,6 +529,7 @@ main() {
   # reached 100% and stalled deploys at `git fetch` on 2026-10-16.
   log "Pruning superseded release images (keeping ${IMAGE_KEEP_HOURS}h)"
   prune_release_images
+  check_disk_pressure
 
   log "Deploy finished"
 }

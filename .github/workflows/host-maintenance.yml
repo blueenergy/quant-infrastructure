@@ -17,10 +17,18 @@ name: Host maintenance
 #     they are a week old, so a rollback target survives the run.
 #   - Containers are only removed once they have been stopped for a day.
 #
-# Triggers: workflow_dispatch only. This never runs on push.
+# Triggers: workflow_dispatch, plus the weekly schedule below. Never on push.
+#
+# How it reports: the run ends with a VERDICT section, and if the disk is still
+# at or above DISK_ALERT_PCT once the cleanup has finished, that becomes a
+# `::warning` line which the notify job turns into a DingTalk message. A cleanup
+# that *ran* is not a disk that is *fine* -- 2026-10-16 is what that cost: the
+# host sat at 100% for two days with every prune line green.
 #
 # Required secrets: VOLC_SSH_KEY, VOLC_HOST, VOLC_USER
 # (Same set the deploy job uses. ALIYUN_* are not needed -- this pulls nothing.)
+# Optional (warning → DingTalk; without them the warning stays in the log):
+#   DATA_CONTRACT_WEBHOOK_URL, DATA_CONTRACT_WEBHOOK_SECRET
 #
 # Optional repo variable: INFRA_REMOTE_DIR (default: ~/trading/quant-infrastructure)
 # ============================================================================
@@ -44,6 +52,10 @@ on:
         description: "Keep this much journald history (e.g. 200M)"
         required: false
         default: "200M"
+      disk_alert_pct:
+        description: "Warn if / is still at or above this % after the cleanup (85)"
+        required: false
+        default: "85"
 
 permissions:
   contents: read
@@ -53,9 +65,14 @@ jobs:
     name: Diagnose and reclaim disk
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Threshold alerts the host raised (disk still tight after a full pass).
+    # They do not fail this job -- see the notify job at the bottom.
+    outputs:
+      warnings: ${{ steps.warn.outputs.warnings }}
     env:
       IMAGE_AGE_HOURS: ${{ inputs.image_age_hours || '168' }}
       JOURNAL_KEEP: ${{ inputs.journal_keep || '200M' }}
+      DISK_ALERT_PCT: ${{ inputs.disk_alert_pct || '85' }}
       INFRA_REMOTE_DIR: ${{ vars.INFRA_REMOTE_DIR || '~/trading/quant-infrastructure' }}
     steps:
       - name: Set up SSH key
@@ -69,8 +86,13 @@ jobs:
             || echo "ssh-keyscan failed (non-fatal)"
 
       - name: Diagnose and reclaim
+        id: reclaim
         timeout-minutes: 25
         run: |
+          # Tee so the warning step below can read what the host reported while
+          # the log still streams live, and pipefail so a dead SSH connection
+          # stays a failed step instead of becoming a silent one.
+          set -o pipefail
           ssh -i ~/.ssh/id_ed25519 \
             -o BatchMode=yes \
             -o ConnectTimeout=30 \
@@ -81,7 +103,9 @@ jobs:
             "${{ secrets.VOLC_USER }}@${{ secrets.VOLC_HOST }}" \
             "IMAGE_AGE_HOURS='${IMAGE_AGE_HOURS}' \
              JOURNAL_KEEP='${JOURNAL_KEEP}' \
-             INFRA_REMOTE_DIR='${INFRA_REMOTE_DIR}' bash -s" <<'EOF'
+             DISK_ALERT_PCT='${DISK_ALERT_PCT}' \
+             INFRA_REMOTE_DIR='${INFRA_REMOTE_DIR}' bash -s" <<'EOF' 2>&1 \
+            | tee "$RUNNER_TEMP/reclaim.log"
           set -uo pipefail
           # Re-apply the defaults here, not only in the workflow env: on a
           # `schedule` event the `inputs` context is unset, so an empty
@@ -89,6 +113,7 @@ jobs:
           # silently. Cheap insurance against the whole class.
           IMAGE_AGE_HOURS="${IMAGE_AGE_HOURS:-168}"
           JOURNAL_KEEP="${JOURNAL_KEEP:-200M}"
+          DISK_ALERT_PCT="${DISK_ALERT_PCT:-85}"
           # Deliberately NOT `set -e`: the whole point of this run is that the
           # disk is full, so individual probes and prunes may fail. Each step
           # reports for itself and the run continues to the end -- a partial
@@ -112,7 +137,8 @@ jobs:
           du -xsh "$HOME"/* 2>/dev/null | sort -rh | head -12
           echo
           echo "----- counts -----"
-          echo "images    : $(docker images -q 2>/dev/null | wc -l)"
+          images_before="$(docker images -q 2>/dev/null | wc -l)"
+          echo "images    : ${images_before}"
           echo "containers: $(docker ps -aq 2>/dev/null | wc -l) total, $(docker ps -q 2>/dev/null | wc -l) running"
           echo "volumes   : $(docker volume ls -q 2>/dev/null | wc -l)  (NEVER touched by this run)"
           echo
@@ -143,4 +169,57 @@ jobs:
           echo
           echo "===== still running ====="
           docker ps --format '{{.Names}}\t{{.Image}}\t{{.Status}}' | sort
+          echo
+          echo "===== VERDICT ====="
+          images_after="$(docker images -q 2>/dev/null | wc -l)"
+          used_pct="$(df --output=pcent / 2>/dev/null | tail -1 | tr -dc '0-9' || true)"
+          echo "images: ${images_before} -> ${images_after}"
+          echo "disk  : ${used_pct:-?}% used (alert threshold ${DISK_ALERT_PCT}%)"
+          # Deliberately NOT "the run freed nothing": in steady state a weekly
+          # pass legitimately finds little, and a robot that cries wolf every
+          # Sunday is a robot nobody reads (see the 2026-10-16 note: the failure
+          # alarm fired for four days and changed nothing).
+          # What is worth a page is a *finished* cleanup that left the disk tight
+          # anyway -- the space is then held by something a deploy must not touch,
+          # and the next `No space left on device` is one week away.
+          if [ "${used_pct:-0}" -ge "${DISK_ALERT_PCT}" ]; then
+            echo "::warning title=disk still tight on $(hostname)::/ is still ${used_pct}% used after a full cleanup pass (images ${images_before} -> ${images_after}, image age window ${IMAGE_AGE_HOURS}h); the space is held by something this workflow will not remove -- read the breakdown above"
+          fi
           EOF
+
+      - name: Collect host warnings
+        id: warn
+        # Reads what the host reported, separately from the run itself, so the
+        # verdict survives even when the reclaim step ends red.
+        if: always()
+        run: |
+          log="$RUNNER_TEMP/reclaim.log"
+          [ -s "$log" ] || { echo "no run log"; exit 0; }
+          # The host emits `::warning title=<t>::<text>` (the runner renders those
+          # as annotations too); strip the command so the DingTalk message reads
+          # as a sentence rather than as workflow syntax.
+          warnings="$(grep -E '^::warning title=' "$log" \
+            | sed -E 's/^::warning title=([^:]*)::/- [\1] /' || true)"
+          [ -n "$warnings" ] || { echo "no host warnings"; exit 0; }
+          echo "$warnings"
+          { echo "warnings<<WARN_EOF"; echo "$warnings"; echo "WARN_EOF"; } >> "$GITHUB_OUTPUT"
+
+  notify-dingtalk:
+    name: Notify DingTalk
+    # Two different things page here and only one of them is a failure. A run
+    # that dies (SSH down, stuck lock) used to be entirely silent: this workflow
+    # is manual + weekly, so nothing else was watching it. A run that finishes
+    # with the disk still tight is the 2026-10-16 shape, one week early.
+    if: ${{ always() && (needs.disk.result == 'failure' || needs.disk.result == 'cancelled' || needs.disk.outputs.warnings != '') }}
+    needs: [disk]
+    uses: ./.github/workflows/notify-dingtalk.yml
+    secrets:
+      DATA_CONTRACT_WEBHOOK_URL: ${{ secrets.DATA_CONTRACT_WEBHOOK_URL }}
+      DATA_CONTRACT_WEBHOOK_SECRET: ${{ secrets.DATA_CONTRACT_WEBHOOK_SECRET }}
+    with:
+      workflow: ${{ github.workflow }}
+      needs_json: ${{ toJSON(needs) }}
+      alert_title: "宿主机告警 ${{ github.repository }}"
+      # Only a *successful* run turns collected warnings into the message; a
+      # failed one keeps the failure payload, which names the jobs that died.
+      alert_text: ${{ needs.disk.result == 'success' && needs.disk.outputs.warnings || '' }}

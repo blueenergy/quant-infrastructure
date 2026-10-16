@@ -78,6 +78,46 @@ class PayloadTests(unittest.TestCase):
         self.assertIn("`abcdef1`", text)
         self.assertIn("打开 Actions", text)
 
+    def test_alert_text_switches_to_a_warning_payload(self):
+        # A host that is nearly out of disk is not a failed job. If this ever
+        # regresses to the failure title, the robot reports the wrong thing on
+        # exactly the alerts that are supposed to arrive *before* anything fails.
+        payload = build_payload(
+            repository="blueenergy/quant-infrastructure",
+            workflow="Deploy app stack",
+            event="repository_dispatch",
+            ref="main",
+            sha="abcdef123456",
+            actor="shuyolin",
+            run_url="https://github.com/blueenergy/quant-infrastructure/actions/runs/1",
+            failed_jobs=[],
+            alert_title="宿主机告警 blueenergy/quant-infrastructure",
+            alert_text="- [disk pressure on 115] / is 91% used",
+        )
+        self.assertEqual(payload["markdown"]["title"], "宿主机告警 blueenergy/quant-infrastructure")
+        text = payload["markdown"]["text"]
+        self.assertIn("disk pressure on 115", text)
+        self.assertIn("91% used", text)
+        self.assertNotIn("失败", text)
+        self.assertIn("打开 Actions", text)
+
+    def test_alert_without_text_stays_a_failure(self):
+        # The two modes are chosen by alert_text alone, so a caller that sets
+        # only a title (or a stray empty env var) cannot silently downgrade a
+        # real failure report into a warning.
+        payload = build_payload(
+            repository="blueenergy/quantFinance",
+            workflow="CI",
+            event="push",
+            ref="main",
+            sha="abcdef123456",
+            actor="shuyolin",
+            run_url="",
+            failed_jobs=["docker"],
+            alert_title="宿主机告警",
+        )
+        self.assertEqual(payload["markdown"]["title"], "[CI] 失败 blueenergy/quantFinance")
+
 
 class SendTests(unittest.TestCase):
     def test_http_200_with_errcode_is_failure(self):

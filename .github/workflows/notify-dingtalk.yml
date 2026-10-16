@@ -19,6 +19,13 @@
 # failure-only guard stays silent on exactly the hang it was added to catch
 # (2026-09-21: a stalled registry push went unnoticed for 3.5 hours).
 #
+# The same call sends a WARNING rather than a failure when the caller passes
+# `alert_text`. Not every alert is a failed job -- a host that is nearly out of
+# disk, a cleanup run that freed nothing -- and titling those "失败" is how the
+# robot's one honest signal gets diluted. Callers: deploy.yml (host warnings
+# collected from the deploy log) and host-maintenance.yml (disk still tight
+# after a full cleanup pass).
+#
 # Same-repo callers (this repository) should use:
 #   uses: ./.github/workflows/notify-dingtalk.yml
 #
@@ -44,6 +51,16 @@ on:
         type: string
         required: false
         default: "{}"
+      # Warning mode: when alert_text is set the message is a warning about the
+      # host rather than a report of a failed job (alert_title sets the subject).
+      alert_title:
+        type: string
+        required: false
+        default: ""
+      alert_text:
+        type: string
+        required: false
+        default: ""
     secrets:
       DATA_CONTRACT_WEBHOOK_URL:
         required: false
@@ -67,6 +84,8 @@ jobs:
           CI_ACTOR: ${{ github.actor }}
           CI_EVENT: ${{ github.event_name }}
           CI_WORKFLOW: ${{ inputs.workflow }}
+          CI_ALERT_TITLE: ${{ inputs.alert_title }}
+          CI_ALERT_TEXT: ${{ inputs.alert_text }}
           CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           CI_NEEDS: ${{ inputs.needs_json }}
         run: |
@@ -128,7 +147,21 @@ jobs:
               return names
 
 
-          def build_payload(repository, workflow, event, ref, sha, actor, run_url, failed_jobs):
+          def build_payload(
+              repository, workflow, event, ref, sha, actor, run_url, failed_jobs,
+              alert_title="", alert_text="",
+          ):
+              # Warning mode (see scripts/notify_ci_dingtalk.py for the full note):
+              # not every alert is a failed job, and titling a host warning "失败"
+              # is how the robot's one honest signal gets diluted.
+              if alert_text:
+                  subject = alert_title or f"[CI] 警告 {repository}"
+                  lines = [f"## {subject}", "", alert_text, ""]
+                  if workflow:
+                      lines.append(f"- workflow: {workflow}")
+                  if run_url:
+                      lines.append(f"- [打开 Actions]({run_url})")
+                  return {"msgtype": "markdown", "markdown": {"title": subject, "text": "\n".join(lines)}}
               subject = f"[CI] 失败 {repository}"
               sha7 = sha[:7] if sha else ""
               failed = ", ".join(failed_jobs) or "unknown"
@@ -185,6 +218,8 @@ jobs:
                   actor=os.environ.get("CI_ACTOR") or "",
                   run_url=os.environ.get("CI_RUN_URL") or "",
                   failed_jobs=failed_job_names(os.environ.get("CI_NEEDS") or "{}"),
+                  alert_title=(os.environ.get("CI_ALERT_TITLE") or "").strip(),
+                  alert_text=(os.environ.get("CI_ALERT_TEXT") or "").strip(),
               )
               try:
                   timeout = float(os.environ.get(WEBHOOK_TIMEOUT_ENV) or "10")

@@ -128,6 +128,10 @@ jobs:
     if: github.event_name == 'repository_dispatch' || github.event_name == 'workflow_dispatch'
     needs: [validate, sync-overlay]
     runs-on: ubuntu-latest
+    # Threshold alerts the host raised during the rollout (disk %, a prune that
+    # freed nothing). They do not fail this job -- see the notify job below.
+    outputs:
+      warnings: ${{ steps.warn.outputs.warnings }}
     # Do NOT use a GitHub concurrency group here. `cancel-in-progress: false`
     # still cancels *queued* runs in the same group when a newer dispatch
     # arrives ("Canceling since a higher priority waiting request exists").
@@ -160,11 +164,17 @@ jobs:
             || echo "ssh-keyscan failed (non-fatal)"
 
       - name: Deploy over SSH
+        id: rollout
         timeout-minutes: 30
         env:
           SERVICES: ${{ steps.svc.outputs.services }}
           INFRA_REMOTE_DIR: ${{ vars.INFRA_REMOTE_DIR || '~/trading/quant-infrastructure' }}
         run: |
+          # Keep the stream live for whoever is watching, and a copy on disk for
+          # the warning step below. pipefail is what makes tee safe here: without
+          # it the pipeline reports tee's status and a failed rollout would look
+          # successful and never retry.
+          set -o pipefail
           run_remote() {
             ssh -i ~/.ssh/id_ed25519 \
               -o BatchMode=yes \
@@ -198,11 +208,28 @@ jobs:
           }
 
           for attempt in 1 2 3; do
-            if run_remote; then exit 0; fi
+            if run_remote 2>&1 | tee -a "$RUNNER_TEMP/rollout.log"; then exit 0; fi
             echo "Deploy attempt ${attempt} failed"
             [ "$attempt" -eq 3 ] && exit 1
             sleep $((attempt * 30))
           done
+
+      - name: Collect host warnings
+        id: warn
+        # Runs even when the rollout failed: warnings from an earlier attempt
+        # are still part of the story, and the notify job decides what to send.
+        if: always()
+        run: |
+          log="$RUNNER_TEMP/rollout.log"
+          [ -s "$log" ] || { echo "no rollout log"; exit 0; }
+          # apps/deploy.sh emits `::warning title=<t>::<text>` (the runner also
+          # renders those as annotations); strip the command so the DingTalk
+          # message reads as a sentence rather than as workflow syntax.
+          warnings="$(grep -E '^::warning title=' "$log" \
+            | sed -E 's/^::warning title=([^:]*)::/- [\1] /' || true)"
+          [ -n "$warnings" ] || { echo "no host warnings"; exit 0; }
+          echo "$warnings"
+          { echo "warnings<<WARN_EOF"; echo "$warnings"; echo "WARN_EOF"; } >> "$GITHUB_OUTPUT"
 
   notify-dingtalk:
     name: Notify DingTalk on failure
@@ -215,3 +242,20 @@ jobs:
     with:
       workflow: ${{ github.workflow }}
       needs_json: ${{ toJSON(needs) }}
+
+  notify-dingtalk-warn:
+    name: Notify DingTalk on host warnings
+    # Warnings ride a *green* rollout only. When the deploy itself failed, the
+    # job above already pages, and two messages for one incident is how a robot
+    # gets muted. This is the half that was missing: on 2026-10-16 every deploy
+    # line was green while the host underneath was running out of disk.
+    if: ${{ always() && needs.deploy.result == 'success' && needs.deploy.outputs.warnings != '' }}
+    needs: [validate, sync-overlay, deploy]
+    uses: ./.github/workflows/notify-dingtalk.yml
+    secrets:
+      DATA_CONTRACT_WEBHOOK_URL: ${{ secrets.DATA_CONTRACT_WEBHOOK_URL }}
+      DATA_CONTRACT_WEBHOOK_SECRET: ${{ secrets.DATA_CONTRACT_WEBHOOK_SECRET }}
+    with:
+      workflow: ${{ github.workflow }}
+      alert_title: "宿主机告警 ${{ github.repository }}"
+      alert_text: ${{ needs.deploy.outputs.warnings }}

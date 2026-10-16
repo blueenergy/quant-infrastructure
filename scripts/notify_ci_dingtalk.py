@@ -8,6 +8,12 @@ k8s data-contract alerter, so GitHub org secrets can reuse that robot.
 CI_* environment variables are filled by .github/workflows/notify-dingtalk.yml.
 Keep that workflow's embedded copy in sync with this file.
 
+Setting CI_ALERT_TEXT turns the message into a warning rather than a failure --
+used by deploy.yml (host disk pressure, a prune that freed nothing) and
+host-maintenance.yml (a cleanup run that finished with the disk still tight).
+Both are green runs that still deserve a page. CI_ALERT_TITLE sets the subject;
+without it the subject falls back to "[CI] 警告 <repo>".
+
 Exit 0 if the webhook is unset (so repos without secrets do not go extra-red)
 or the message is accepted. Exit 1 if DingTalk rejects the body (errcode).
 """
@@ -80,7 +86,26 @@ def build_payload(
     actor: str,
     run_url: str,
     failed_jobs: list[str],
+    alert_title: str = "",
+    alert_text: str = "",
 ) -> dict:
+    """Failure markdown by default; a warning markdown when alert_text is given.
+
+    The warning branch is for alerts that are *not* CI failures -- a host that
+    is nearly out of disk, a prune that freed nothing while the log said it ran.
+    Those must not be titled "失败": a robot whose every message says the same
+    thing is a robot nobody reads, and the 2026-10-16 disk fill ran for four
+    days with the failure alarm firing the whole time.
+    """
+    if alert_text:
+        subject = alert_title or f"[CI] 警告 {repository}"
+        lines = [f"## {subject}", "", alert_text, ""]
+        if workflow:
+            lines.append(f"- workflow: {workflow}")
+        if run_url:
+            lines.append(f"- [打开 Actions]({run_url})")
+        return {"msgtype": "markdown", "markdown": {"title": subject, "text": "\n".join(lines)}}
+
     subject = f"[CI] 失败 {repository}"
     sha7 = sha[:7] if sha else ""
     failed = ", ".join(failed_jobs) or "unknown"
@@ -139,6 +164,8 @@ def main(env: dict | None = None) -> int:
         actor=env.get("CI_ACTOR") or "",
         run_url=env.get("CI_RUN_URL") or "",
         failed_jobs=failed_job_names(env.get("CI_NEEDS") or "{}"),
+        alert_title=(env.get("CI_ALERT_TITLE") or "").strip(),
+        alert_text=(env.get("CI_ALERT_TEXT") or "").strip(),
     )
     try:
         timeout = float(env.get(WEBHOOK_TIMEOUT_ENV) or "10")
