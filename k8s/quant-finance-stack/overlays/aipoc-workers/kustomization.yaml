@@ -30,7 +30,7 @@ images:
     newTag: sha-cad717e
   - name: quant-analyzer:latest
     newName: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-analyzer
-    newTag: sha-f52eec6
+    newTag: sha-4483b72
   - name: quant-model-trainer:latest
     newName: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-model-trainer
     newTag: sha-5dea655
