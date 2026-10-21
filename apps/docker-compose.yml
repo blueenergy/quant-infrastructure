@@ -430,6 +430,8 @@ services:
       - env/quant-data-engine.env
     volumes:
       - /home/shuyolin/trading/quant-data-engine/scripts/bigqmt_rpc_bridge.json:/app/scripts/bigqmt_rpc_bridge.json:ro
+      # file transport 信箱：QMT 实盘端 cwd=bin.x64、root=bqbox
+      - /mnt/d/国金证券QMT交易端/bin.x64/bqbox:/app/bqbox
       - ./logs/quant-realtime-dayk:/app/logs
     logging:
       driver: json-file
@@ -453,6 +455,8 @@ services:
       - env/quant-data-engine.env
     volumes:
       - /home/shuyolin/trading/quant-data-engine/scripts/bigqmt_rpc_bridge.watchlist_minute_kline.json:/app/scripts/bigqmt_rpc_bridge.watchlist_minute_kline.json:ro
+      # 与 dayk 同一个 root，但 client_id 不同（信箱路径即身份）
+      - /mnt/d/国金证券QMT交易端/bin.x64/bqbox:/app/bqbox
       - ./logs/quant-realtime-minute:/app/logs
     logging:
       driver: json-file
