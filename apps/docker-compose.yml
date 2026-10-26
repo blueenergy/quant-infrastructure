@@ -501,6 +501,31 @@ services:
         max-size: "50m"
         max-file: "3"
 
+  # 实盘账户（8885156549）的独立实例：与模拟实例共用镜像，但配置/信箱/数据卷
+  # 全部隔离。file.root 指向 live 客户端的 bqbox/trade —— 实盘客户端同时跑
+  # quote 策略（root=bqbox），两个策略不能共用同一个 mailbox root。
+  quant-trader-live:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-trader:${QUANT_TRADER_IMAGE_TAG:-latest}
+    container_name: quant-trader-live
+    profiles: ["trader-local"]
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TZ=Asia/Shanghai
+      - QUANT_TRADER_EXECUTION_OUTBOX_PATH=/app/data/execution_outbox.json
+    volumes:
+      # 实盘配置：user_id=shuyolin / 8885156549 / rpc_allow_order_methods=false（shadow）
+      - /home/shuyolin/trading/quantTrader/config.qmt_bridge.live.json:/app/config/config.json:ro
+      # live 客户端 bqbox；策略侧 file.root=bqbox/trade，容器侧 /app/bqbox/trade
+      - /mnt/d/国金证券QMT交易端/bin.x64/bqbox:/app/bqbox
+      - ./data/quant-trader-live:/app/data
+      - ./logs/quant-trader-live:/root/.local/share/quantTrader/logs
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
   # [MIGRATED] Mirrors CI deploy: add-host for same-host API calls, cache
   # volume, log rotation, layered env.
   backtest-worker:
