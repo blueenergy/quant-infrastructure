@@ -633,6 +633,10 @@ services:
       - "5001:5000"
     volumes:
       - ./logs/quant-strategy-manager:/app/quant-strategy-manager/logs
+      # Strategy position state must survive `up --force-recreate` (every deploy).
+      # Without it the engine reloads pos=0 and replays its backdated entry,
+      # emitting a duplicate BUY signal on each restart.
+      - ./state/quant-strategy-manager:/app/vnpy-live-trading/scripts/state
     networks:
       - quant-net
     logging:
