@@ -84,11 +84,15 @@ container_healthy() {
 # 失败时输出错误文本，由调用方判解析失败。
 mongo_metrics() {
   local js='const st = rs.status();
-const me = st.members.find(m => m.name.indexOf("192.168.3.9") === 0);
+// 不能写死主机 IP：WSL 重启后 LAN IP 会变（旧值 192.168.3.9 已失效，
+// 导致 me=undefined、lag/window 恒为 -1、Mac 滞后告警静默）。按状态取主库。
+const me = st.members.find(m => m.stateStr === "PRIMARY");
 const sec = st.members.find(m => m.name.indexOf("192.168.3.5") === 0);
 const w = db.hello().isWritablePrimary;
 const lag = (me && me.optimeDate && sec && sec.optimeDate) ? Math.round((me.optimeDate - sec.optimeDate) / 1000) : -1;
-const first = db.getSiblingDB("local").oplog.rs.find({}, {ts:1}).sort({ts:1}).limit(1).tryNext();
+// $natural 顺序 = oplog 写入顺序 = ts 升序；按 ts 排序会强制 COLLSCAN + 全量排序
+// （12.7M 文档 / 每次 9-15 秒 CPU，每 5 分钟一次），见 2026-10-28 的 CPU 尖峰排查。
+const first = db.getSiblingDB("local").oplog.rs.find({}, {ts:1}).sort({$natural:1}).limit(1).tryNext();
 const windowSec = (me.optimeDate && first) ? Math.round((me.optimeDate - new Date(first.ts.getHighBits() * 1000)) / 1000) : -1;
 print("METRICS|" + [w ? "true" : "false", sec ? sec.health : -1, sec ? sec.stateStr : "NONE", lag, windowSec].join("|"));'
   # print 之后 mongosh 还会补一个空提示符行，用 METRICS| 前缀 + tail 精确定位
