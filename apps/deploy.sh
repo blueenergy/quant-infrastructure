@@ -182,8 +182,12 @@ stop_mcp_on_115() {
 # replaces the default file list, so Compose loads the memory-limit overlay
 # (no `image:`) and fails with "has neither an image nor a build context".
 COMPOSE=(docker compose --env-file versions.env -f docker-compose.yml)
-if [ -f docker-compose.115.yml ] && [ "$(_common_env_get COMPOSE_HOST_PROFILE)" = "115" ]; then
-  COMPOSE+=( -f docker-compose.115.yml )
+# Host-specific overlay: COMPOSE_HOST_PROFILE=115 -> docker-compose.115.yml,
+# =local -> docker-compose.local.yml. The base file is the shared topology for
+# every host, so machine-only paths (e.g. an E: drive) belong in the overlay.
+COMPOSE_HOST_PROFILE_VALUE=$(_common_env_get COMPOSE_HOST_PROFILE)
+if [ -n "$COMPOSE_HOST_PROFILE_VALUE" ] && [ -f "docker-compose.${COMPOSE_HOST_PROFILE_VALUE}.yml" ]; then
+  COMPOSE+=( -f "docker-compose.${COMPOSE_HOST_PROFILE_VALUE}.yml" )
 fi
 
 # Derive opt-in profiles for services that can run either on this Compose host

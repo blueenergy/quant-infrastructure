@@ -1,0 +1,13 @@
+# 本机（WSL）专属 overlay，只在 common.env 设置 COMPOSE_HOST_PROFILE=local 时加载。
+#
+# 和 docker-compose.115.yml 同一个机制：基础文件是两台机器共用的拓扑，主机
+# 差异放 overlay，避免把只存在于某台机器上的路径（如 E 盘）带进另一台。
+#
+# 当前差异：quant-trader 用的是 E 盘那套无 Python 沙箱的老模拟客户端
+# （2.1.19）。2.1.33 起客户端禁止策略 open()，file transport 在 D 盘模拟端
+# 完全不可用，详见 llm-wiki/projects/trading/qmt-python-fileio-sandbox-2026-10-28.md。
+
+services:
+  quant-trader:
+    volumes:
+      - /mnt/e/国金QMT交易端模拟/bin.x64/bqbox:/app/bqbox

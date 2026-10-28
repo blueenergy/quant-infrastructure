@@ -492,6 +492,8 @@ services:
       - /home/shuyolin/trading/quantTrader/config.qmt_bridge.json:/app/config/config.json:ro
       # file transport 的 mailbox：QMT 侧 cwd=bin.x64、root=bqbox，两侧必须
       # 指向同一个 Windows 目录。策略没跑时这里为空是正常的。
+      # 本机用的是 E 盘那个无沙箱的老客户端 —— 该差异在
+      # docker-compose.local.yml（COMPOSE_HOST_PROFILE=local）里覆盖。
       - /mnt/d/国金QMT交易端模拟/bin.x64/bqbox:/app/bqbox
       - ./data/quant-trader:/app/data
       - ./logs/quant-trader:/root/.local/share/quantTrader/logs
