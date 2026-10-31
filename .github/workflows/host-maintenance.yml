@@ -36,7 +36,8 @@ name: Host maintenance
 on:
   schedule:
     # Weekly safety net. apps/deploy.sh now prunes its own superseded images
-    # (IMAGE_KEEP_HOURS, default 12), so in steady state this run finds little.
+    # (keep last IMAGE_KEEP_LAST_N=2 per repo / IMAGE_KEEP_HOURS=12), so in
+    # steady state this run finds little.
     # It is here for what the deploy path structurally cannot catch: a burst of
     # deploys that ages past its window, images pulled outside deploy.sh, or a
     # long stretch with no deploys at all. Sunday 19:17 UTC = Monday 03:17 CST,

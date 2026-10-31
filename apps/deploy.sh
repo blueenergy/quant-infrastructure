@@ -20,6 +20,10 @@
 #   COMPOSE_WAIT  (default: 1 -> pass --wait to `up`)
 #   IMAGE_KEEP_HOURS (default: 12 -> how long a superseded image stays on disk
 #                    as a rollback target before the post-deploy prune drops it)
+#   IMAGE_KEEP_LAST_N (default: 2 -> keep at most the newest N release images
+#                    per repo; caps same-day build churn even inside the window)
+#   IMAGE_MIN_AGE_HOURS (default: 1 -> never prune an image younger than this,
+#                    so a concurrent deploy cannot lose the image it just pulled)
 #   DISK_ALERT_PCT   (default: 85 -> warn when / is at or above this after the
 #                    prune. 2026-10-16: this host filled to 100%, every deploy
 #                    died at `git fetch`, and the only signal was a green log)
@@ -35,6 +39,8 @@ cd "$SCRIPT_DIR"
 ACR_REGISTRY="${ACR_REGISTRY:-crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com}"
 COMPOSE_WAIT="${COMPOSE_WAIT:-1}"
 IMAGE_KEEP_HOURS="${IMAGE_KEEP_HOURS:-12}"
+IMAGE_KEEP_LAST_N="${IMAGE_KEEP_LAST_N:-2}"
+IMAGE_MIN_AGE_HOURS="${IMAGE_MIN_AGE_HOURS:-1}"
 DISK_ALERT_PCT="${DISK_ALERT_PCT:-85}"
 SERVICES=()
 
@@ -357,14 +363,28 @@ run_hook() {
 # that pushing to ACR exists to avoid. Everything in scope here came off the
 # registry, so it can always come off it again; nothing here needs a rebuild.
 #
-# Two guards, both conservative:
-#   - only images older than IMAGE_KEEP_HOURS, so a fresh rollback target stays
+# Three guards, all conservative:
+#   - keep the newest IMAGE_KEEP_LAST_N images per repo, so a burst of same-day
+#     builds cannot pile up inside the time window
+#   - only images older than IMAGE_KEEP_HOURS (the time-based upper bound)
 #   - never an image any container references, running *or* stopped, since a
 #     stopped container may yet be started back into its image
+# The newest N and the time window are both upper bounds: an image is pruned
+# when it is past the window OR outside the newest N. A short minimum age
+# keeps a concurrent deploy from pruning the image it just pulled.
 prune_release_images() {
   local dry_run="${1:-}"
-  local cutoff
+  local cutoff min_cutoff keep_ids
   cutoff="$(date -d "-${IMAGE_KEEP_HOURS} hours" '+%Y-%m-%dT%H:%M:%S')"
+  min_cutoff="$(date -d "-${IMAGE_MIN_AGE_HOURS} hours" '+%Y-%m-%dT%H:%M:%S')"
+  keep_ids="$(
+    docker images --no-trunc \
+      --filter "reference=${ACR_REGISTRY}/wukongquant/*:sha-*" \
+      --format '{{.ID}}|{{.Repository}}|{{.CreatedAt}}' \
+    | sort -t'|' -k2,2 -k3,3r \
+    | awk -F'|' -v n="${IMAGE_KEEP_LAST_N}" '{c[$2]++; if (c[$2] <= n) print $1}' \
+    | sort -u
+  )"
 
   local referenced foreign_tagged
   referenced="$(docker ps -aq | xargs -r docker inspect --format '{{.Image}}' 2>/dev/null | sort -u || true)"
@@ -373,15 +393,20 @@ prune_release_images() {
   foreign_tagged="$(docker images --no-trunc --format '{{.ID}} {{.Tag}}' \
                       | awk '$2 !~ /^sha-/ {print $1}' | sort -u)"
 
-  local id date time tag
+  local id date time tag in_keep
   local -a doomed=() targets=()
   while read -r id date time _; do
     [ -n "${id:-}" ] || continue
-    # CreatedAt is "YYYY-MM-DD HH:MM:SS +ZZZZ TZ". Joining date and time with a
-    # T makes both sides ISO, so the comparison can just be lexical.
-    [ "${date}T${time}" \< "$cutoff" ] || continue
+    # Never touch an image younger than the deploy-race grace period.
+    [ "${date}T${time}" \< "$min_cutoff" ] || continue
     case "$referenced" in *"$id"*) continue ;; esac
     case "$foreign_tagged" in *"$id"*) continue ;; esac
+    # Keep the newest N per repo until it ages past the time window.
+    in_keep=0
+    case "$keep_ids" in *"$id"*) in_keep=1 ;; esac
+    if [ "$in_keep" -eq 1 ] && [ "${date}T${time}" \> "$cutoff" ]; then
+      continue
+    fi
     doomed+=("$id")
     # Remove by tag, not by image id. Every release carries the ACR tag *and* a
     # ghcr.io relay tag, and `docker rmi <id>` refuses an image "referenced in
@@ -398,10 +423,10 @@ prune_release_images() {
              --format '{{.ID}} {{.CreatedAt}}')
 
   if [ "${#doomed[@]}" -eq 0 ]; then
-    log "  nothing superseded older than ${IMAGE_KEEP_HOURS}h"
+    log "  nothing to prune (keep last ${IMAGE_KEEP_LAST_N}/repo, ${IMAGE_KEEP_HOURS}h, min age ${IMAGE_MIN_AGE_HOURS}h)"
     return 0
   fi
-  log "  ${#doomed[@]} superseded release image(s) older than ${IMAGE_KEEP_HOURS}h"
+  log "  ${#doomed[@]} superseded release image(s) (keep last ${IMAGE_KEEP_LAST_N}/repo, ${IMAGE_KEEP_HOURS}h, min age ${IMAGE_MIN_AGE_HOURS}h)"
   if [ "$dry_run" = "--dry-run" ]; then
     printf '    %s\n' "${targets[@]}"
     return 0
@@ -443,7 +468,7 @@ check_disk_pressure() {
   if [ "$used" -ge "$DISK_ALERT_PCT" ]; then
     avail="$(df -h --output=avail / 2>/dev/null | tail -1 | tr -d ' ' || true)"
     warn "disk pressure on $(hostname)" \
-      "/ is ${used}% used (${avail:-?} free) after pruning to ${IMAGE_KEEP_HOURS}h; deploys start dying at 100% -- run the Host maintenance workflow, which can reclaim what a deploy must not touch"
+      "/ is ${used}% used (${avail:-?} free) after pruning (keep last ${IMAGE_KEEP_LAST_N}/repo, ${IMAGE_KEEP_HOURS}h); deploys start dying at 100% -- run the Host maintenance workflow, which can reclaim what a deploy must not touch"
   fi
 }
 
