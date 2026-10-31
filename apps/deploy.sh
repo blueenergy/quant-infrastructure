@@ -18,7 +18,7 @@
 # Optional env:
 #   ACR_REGISTRY  (default: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com)
 #   COMPOSE_WAIT  (default: 1 -> pass --wait to `up`)
-#   IMAGE_KEEP_HOURS (default: 48 -> how long a superseded image stays on disk
+#   IMAGE_KEEP_HOURS (default: 12 -> how long a superseded image stays on disk
 #                    as a rollback target before the post-deploy prune drops it)
 #   DISK_ALERT_PCT   (default: 85 -> warn when / is at or above this after the
 #                    prune. 2026-10-16: this host filled to 100%, every deploy
@@ -34,7 +34,7 @@ cd "$SCRIPT_DIR"
 
 ACR_REGISTRY="${ACR_REGISTRY:-crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com}"
 COMPOSE_WAIT="${COMPOSE_WAIT:-1}"
-IMAGE_KEEP_HOURS="${IMAGE_KEEP_HOURS:-48}"
+IMAGE_KEEP_HOURS="${IMAGE_KEEP_HOURS:-12}"
 DISK_ALERT_PCT="${DISK_ALERT_PCT:-85}"
 SERVICES=()
 
