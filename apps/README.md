@@ -350,6 +350,7 @@ Pilot: **quant-data-engine** (done in CI; verify before migrating the rest).
 | backtest-worker | `BACKTEST_WORKER_IMAGE_TAG` | ✅ |
 | quant-analyzer | `QUANT_ANALYZER_IMAGE_TAG` | ✅ |
 | quant-strategy-manager | `QUANT_STRATEGY_MANAGER_IMAGE_TAG` | ✅ |
+| quant-assistant | `QUANT_ASSISTANT_IMAGE_TAG` | 🕒 host cron one-shot (`host/assistant_brief.sh`), no compose service |
 
 `quant-scorer`、`quant-researcher`、`quant-portfolio` 共享同一个
 `stock-scoring-system` 镜像 tag，通过不同 `command` 分别运行评分、组合研究、
