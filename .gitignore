@@ -1,5 +1,11 @@
 # Logs
 *.log
+host/mirror_to_acr.log.*
+
+# Runtime data/logs/strategy state (bind-mounted from containers; do not commit)
+apps/data/
+apps/logs/
+apps/state/
 
 # Environment
 .env
