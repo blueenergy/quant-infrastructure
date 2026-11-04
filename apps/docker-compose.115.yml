@@ -1,9 +1,10 @@
 # 115 生产机（8GB RAM）应用栈内存上限 override。
 #
-# 115 是边缘节点：只跑 quant-web + quant-api（infra 侧另跑 quant-mongodb 和
-# portainer）。其余服务由 deploy.sh 的 COMPOSE_HOST_PROFILE=115 白名单
-# 默认拒绝（ALLOWED_SERVICES_ON_115），worker 由 K8s / 本机 WSL 承担。
-# 所以本 overlay 只保留这两个服务的 cgroup 上限。
+# 115 是自给自足的最小业务节点：quant-web + quant-api + quant-data-engine
+# （infra 侧另跑 quant-mongodb 和 portainer）。其余服务由 deploy.sh 的
+# COMPOSE_HOST_PROFILE=115 白名单默认拒绝（ALLOWED_SERVICES_ON_115），
+# 重 worker 由 K8s / 本机 WSL 承担。所以本 overlay 只保留这三个服务的
+# cgroup 上限。
 #
 # 启用方式（二选一）:
 #   1. common.env 设置 COMPOSE_HOST_PROFILE=115，然后 ./deploy.sh
@@ -26,4 +27,13 @@ services:
     deploy:
       resources:
         limits:
+          memory: 128m
+
+  # 115 只保留最小采集角色；不再跑 realtime bridge / worker。
+  quant-data-engine:
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
           memory: 128m

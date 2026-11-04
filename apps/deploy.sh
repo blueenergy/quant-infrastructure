@@ -180,12 +180,13 @@ stop_mcp_on_115() {
   "${COMPOSE[@]}" --profile mcp rm -f quant-mcp-read quant-mcp-actions 2>/dev/null || true
 }
 
-# 115 is an edge node: quant-web + quant-api + Mongo + Portainer, nothing else.
-# Default-deny, not a one-time cleanup: a new service, a CI dispatch for a
-# worker, or a bare `./deploy.sh` (which used to mean "up the whole stack")
-# must never bring anything else back. Workers live in K8s / the local WSL
-# host; see docker-compose.115.yml for the corresponding memory-limit trim.
-ALLOWED_SERVICES_ON_115=(quant-api quant-web)
+# 115 is a minimal edge node: quant-web + quant-api + quant-data-engine + Mongo
+# + Portainer, nothing else. Default-deny, not a one-time cleanup: a new
+# service, a CI dispatch for a worker, or a bare `./deploy.sh` (which used to
+# mean "up the whole stack") must never bring anything else back. The heavier
+# workers live in K8s / the local WSL host; see docker-compose.115.yml for the
+# corresponding memory-limit trim.
+ALLOWED_SERVICES_ON_115=(quant-api quant-web quant-data-engine)
 # Containers from other compose projects that must not run on this host.
 FORBIDDEN_CONTAINERS_ON_115=(quant-assistant)
 

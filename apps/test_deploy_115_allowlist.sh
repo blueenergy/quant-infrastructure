@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Unit tests for the 115 edge-node allowlist gate in deploy.sh.
 #
-# 115 must run only quant-api + quant-web (Mongo/Portainer live in the infra
-# compose project and are not part of this service list). These tests cover the
-# pure filtering logic; the container-removal guard is exercised on the host.
+# 115 must run only quant-api + quant-web + quant-data-engine (Mongo/Portainer
+# live in the infra compose project and are not part of this service list).
+# These tests cover the pure filtering logic; the container-removal guard is
+# exercised on the host.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,9 +40,10 @@ echo "== 115 allowlist"
 if with_env "115" '
   SERVICES=()
   filter_services_on_115
-  [ "${#SERVICES[@]}" -eq 2 ]
+  [ "${#SERVICES[@]}" -eq 3 ]
   [ "${SERVICES[0]}" = "quant-api" ]
   [ "${SERVICES[1]}" = "quant-web" ]
+  [ "${SERVICES[2]}" = "quant-data-engine" ]
 '; then
   pass "bare deploy.sh on 115 targets only the allowlist"
 else
@@ -59,11 +61,12 @@ else
 fi
 
 if with_env "115" '
-  SERVICES=(quant-api quant-scorer quant-web quant-analyzer)
+  SERVICES=(quant-api quant-scorer quant-web quant-analyzer quant-data-engine)
   filter_services_on_115
-  [ "${#SERVICES[@]}" -eq 2 ]
+  [ "${#SERVICES[@]}" -eq 3 ]
   [ "${SERVICES[0]}" = "quant-api" ]
   [ "${SERVICES[1]}" = "quant-web" ]
+  [ "${SERVICES[2]}" = "quant-data-engine" ]
 '; then
   pass "115 keeps only allowlisted services and preserves order"
 else
@@ -82,8 +85,8 @@ else
 fi
 
 if with_env "115" '
-  _is_allowed_service_on_115 quant-api && _is_allowed_service_on_115 quant-web
-  ! _is_allowed_service_on_115 quant-data-engine
+  _is_allowed_service_on_115 quant-api && _is_allowed_service_on_115 quant-web && _is_allowed_service_on_115 quant-data-engine
+  ! _is_allowed_service_on_115 quant-scorer
 '; then
   pass "allowlist membership"
 else
