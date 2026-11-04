@@ -464,6 +464,33 @@ services:
         max-size: "50m"
         max-file: "3"
 
+  # 宽基指数盘中行情 poller：独立文件信箱（bqbox/index-quote），
+  # 每 30 秒取 9 个宽基指数，2 分钟落一条 snapshot；不碰 dayk/minute 信箱。
+  # 只读 QMT 行情，不下单；中证2000 在 QMT 无实时，用国证2000 代理。
+  quant-index-quote:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-data-engine:${QUANT_DATA_ENGINE_IMAGE_TAG:-latest}
+    container_name: quant-index-quote
+    profiles: ["data-engine-local"]
+    restart: unless-stopped
+    network_mode: host
+    working_dir: /app
+    command: >
+      python3 scripts/run_index_quote_poller.py
+      --config scripts/index_quote_poller.json
+      --loop
+    env_file:
+      - env/common.env
+      - env/quant-data-engine.env
+    volumes:
+      - /home/shuyolin/trading/quant-data-engine/scripts/index_quote_poller.json:/app/scripts/index_quote_poller.json:ro
+      # 与 dayk/minute 同一个 root，但 client_id 不同（信箱路径即身份）
+      - /mnt/d/国金证券QMT交易端/bin.x64/bqbox:/app/bqbox
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
   # quantTrader 实盘下单端（大 QMT RPC 桥）。profile 门控 —— 不加 --profile 不会启动，
   # 恢复交易的决策与部署解耦（与 quant-realtime-* 同一套惯例）。
   #
