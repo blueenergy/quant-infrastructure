@@ -1,14 +1,13 @@
 # 115 生产机（8GB RAM）应用栈内存上限 override。
 #
-# 为无 mem_limit 的常驻服务加上 cgroup 上限，避免单容器吃光宿主机内存。
-# 与 infra/docker-compose.115-primary.yml（Mongo Primary 3GB）配合使用。
+# 115 是边缘节点：只跑 quant-web + quant-api（infra 侧另跑 quant-mongodb 和
+# portainer）。其余服务由 deploy.sh 的 COMPOSE_HOST_PROFILE=115 白名单
+# 默认拒绝（ALLOWED_SERVICES_ON_115），worker 由 K8s / 本机 WSL 承担。
+# 所以本 overlay 只保留这两个服务的 cgroup 上限。
 #
 # 启用方式（二选一）:
 #   1. common.env 设置 COMPOSE_HOST_PROFILE=115，然后 ./deploy.sh
 #   2. docker compose -f docker-compose.yml -f docker-compose.115.yml up -d
-#
-# MCP（quant-mcp-read / quant-mcp-actions）不在本 overlay 里禁用：deploy.sh 在
-# COMPOSE_HOST_PROFILE=115 时去掉 mcp profile，并 stop/rm 残留容器。
 #
 # 注意：本文件里的 ${...} 只能由 versions.env 或 deploy shell 提供，common.env
 # 不参与 compose 插值（它只经 env_file 注入容器）。所以下面的默认值就是 115 上
@@ -23,105 +22,8 @@ services:
         reservations:
           memory: 256m
 
-  quant-scheduler:
-    deploy:
-      resources:
-        limits:
-          memory: 384m
-        reservations:
-          memory: 128m
-
   quant-web:
     deploy:
       resources:
         limits:
           memory: 128m
-
-  quant-strategy-manager:
-    deploy:
-      resources:
-        limits:
-          memory: 384m
-        reservations:
-          memory: 128m
-
-  quant-data-engine:
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-        reservations:
-          memory: 128m
-
-  backtest-worker:
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-        reservations:
-          memory: 128m
-
-  backtest-screening:
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-        reservations:
-          memory: 128m
-
-  quant-analyzer:
-    deploy:
-      resources:
-        limits:
-          memory: 384m
-        reservations:
-          memory: 128m
-
-  # 8GB 宿主机 + Mongo Primary：压低 scorer/researcher 默认顶
-  quant-scorer:
-    deploy:
-      resources:
-        limits:
-          cpus: "${SCORER_CPU_LIMIT:-2}"
-          memory: "${SCORER_MEM_LIMIT:-2g}"
-        reservations:
-          cpus: "1"
-          memory: 512m
-
-  quant-researcher:
-    deploy:
-      resources:
-        limits:
-          cpus: "${RESEARCHER_CPU_LIMIT:-2}"
-          memory: "${RESEARCHER_MEM_LIMIT:-2g}"
-        reservations:
-          cpus: "0"
-          memory: 256m
-
-  # base 给 factor-researcher 的 8g 等于整台机器的物理内存，起不到保护作用。它
-  # 与 Mongo Primary（3GB）同机，所以这里收到 3g。预算低于上限 1g：超预算的任务
-  # 由 check_budget 拒绝并提示改走「短窗口筛选 + 入围因子长历史复测」两阶段流程，
-  # 好过让估算失手把宿主机 OOM。CSI1000 x 158 因子实测峰值 4.2GB，在 115 上只能
-  # 走两阶段。
-  quant-factor-researcher:
-    environment:
-      - FACTOR_BACKTEST_MEMORY_BUDGET_GB=${FACTOR_BACKTEST_MEMORY_BUDGET_GB:-2}
-    deploy:
-      resources:
-        limits:
-          cpus: "${FACTOR_RESEARCHER_CPU_LIMIT:-2}"
-          memory: "${FACTOR_RESEARCHER_MEM_LIMIT:-3g}"
-        reservations:
-          cpus: "0"
-          memory: 256m
-
-  # Smaller hosts: synthetic MVP fits in less RAM; raise limits for large Parquet.
-  quant-model-trainer:
-    deploy:
-      resources:
-        limits:
-          cpus: "${MODEL_TRAINER_CPU_LIMIT:-2}"
-          memory: "${MODEL_TRAINER_MEM_LIMIT:-8g}"
-        reservations:
-          cpus: "0"
-          memory: 256m

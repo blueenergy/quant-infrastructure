@@ -142,6 +142,20 @@ already includes them).
 bash test_deploy_mcp_profile.sh   # deploy.sh 115 vs default-on gates
 ```
 
+## 115 edge-node allowlist
+
+`COMPOSE_HOST_PROFILE=115` is **default-deny**: `deploy.sh` only deploys
+`quant-api` and `quant-web` (`ALLOWED_SERVICES_ON_115`). A bare
+`./deploy.sh` on 115 lands on that allowlist instead of the whole stack, and
+every deploy removes any container from this compose project that is not on
+the list (plus `FORBIDDEN_CONTAINERS_ON_115`, currently `quant-assistant`).
+`quant-mongodb` and `portainer` belong to the infra stack and are untouched.
+Workers run in K8s or on the local WSL host.
+
+```bash
+bash test_deploy_115_allowlist.sh
+```
+
 ## Daily scorer runtime
 
 `quant-scorer` runs the weekday 19:00 scoring schedule. Run exactly one

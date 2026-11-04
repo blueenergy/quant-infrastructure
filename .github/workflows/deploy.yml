@@ -68,6 +68,9 @@ jobs:
       - name: Test MCP profile gating
         working-directory: apps
         run: bash test_deploy_mcp_profile.sh
+      - name: Test 115 edge-node allowlist
+        working-directory: apps
+        run: bash test_deploy_115_allowlist.sh
 
   sync-overlay:
     name: Sync Argo CD overlay image tags

@@ -180,6 +180,67 @@ stop_mcp_on_115() {
   "${COMPOSE[@]}" --profile mcp rm -f quant-mcp-read quant-mcp-actions 2>/dev/null || true
 }
 
+# 115 is an edge node: quant-web + quant-api + Mongo + Portainer, nothing else.
+# Default-deny, not a one-time cleanup: a new service, a CI dispatch for a
+# worker, or a bare `./deploy.sh` (which used to mean "up the whole stack")
+# must never bring anything else back. Workers live in K8s / the local WSL
+# host; see docker-compose.115.yml for the corresponding memory-limit trim.
+ALLOWED_SERVICES_ON_115=(quant-api quant-web)
+# Containers from other compose projects that must not run on this host.
+FORBIDDEN_CONTAINERS_ON_115=(quant-assistant)
+
+_is_allowed_service_on_115() {
+  local svc="$1" allowed
+  for allowed in "${ALLOWED_SERVICES_ON_115[@]}"; do
+    [ "$svc" = "$allowed" ] && return 0
+  done
+  return 1
+}
+
+filter_services_on_115() {
+  _host_is_115 || return 0
+  if [ "${#SERVICES[@]}" -eq 0 ]; then
+    SERVICES=("${ALLOWED_SERVICES_ON_115[@]}")
+    log "COMPOSE_HOST_PROFILE=115: no explicit targets; deploying allowlist only (${SERVICES[*]})"
+    return 0
+  fi
+  local svc
+  local -a kept=()
+  for svc in "${SERVICES[@]}"; do
+    if _is_allowed_service_on_115 "$svc"; then
+      kept+=("$svc")
+    else
+      log "Skipping $svc (COMPOSE_HOST_PROFILE=115; not in allowlist: ${ALLOWED_SERVICES_ON_115[*]})"
+    fi
+  done
+  SERVICES=("${kept[@]+"${kept[@]}"}")
+}
+
+# Self-healing guard: remove any non-allowlisted container from this checkout's
+# compose project, and the explicitly forbidden foreign ones. Match on the
+# compose working_dir label rather than the project name, because the name is
+# derived from the checkout directory and would change with a rename.
+stop_services_not_allowed_on_115() {
+  _host_is_115 || return 0
+  local name working_dir svc
+  while IFS=$'\t' read -r name working_dir svc; do
+    [ -n "$name" ] || continue
+    [ "$working_dir" = "$SCRIPT_DIR" ] || continue
+    _is_allowed_service_on_115 "$svc" && continue
+    log "COMPOSE_HOST_PROFILE=115: removing $name (service ${svc:-<unknown>} not in allowlist)"
+    docker stop --time 30 "$name" >/dev/null 2>&1 || true
+    docker rm -f "$name" >/dev/null 2>&1 || true
+  done < <(docker ps -a \
+             --format '{{.Names}}\t{{.Label "com.docker.compose.project.working_dir"}}\t{{.Label "com.docker.compose.service"}}')
+  for name in "${FORBIDDEN_CONTAINERS_ON_115[@]}"; do
+    if docker inspect "$name" >/dev/null 2>&1; then
+      log "COMPOSE_HOST_PROFILE=115: removing $name (forbidden on this host)"
+      docker stop --time 30 "$name" >/dev/null 2>&1 || true
+      docker rm -f "$name" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
 # Image tags are interpolated from versions.env. Runtime config/secrets are
 # injected per service via `env_file:` (env/common.env + env/<svc>.env) in the
 # compose file, so they don't need to be passed here.
@@ -487,10 +548,12 @@ main() {
   fi
   expand_mcp_services
   filter_mcp_services_on_115
+  filter_services_on_115
   stop_mcp_on_115
+  stop_services_not_allowed_on_115
   filter_services_for_external_runtimes
   if [ "$explicit_services" -eq 1 ] && [ "${#SERVICES[@]}" -eq 0 ]; then
-    log "No services left to deploy after runtime/MCP filters"
+    log "No services left to deploy after runtime/MCP/115-allowlist filters"
     return 0
   fi
 
