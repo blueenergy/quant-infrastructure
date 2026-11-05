@@ -543,7 +543,9 @@ services:
       - TZ=Asia/Shanghai
       - QUANT_TRADER_EXECUTION_OUTBOX_PATH=/app/data/execution_outbox.json
     volumes:
-      # 实盘配置：user_id=shuyolin / 8885156549 / rpc_allow_order_methods=false（shadow）
+      # 实盘配置：user_id=shuyolin / 8885156549 / rpc_allow_order_methods=true /
+      # execution_events_mode=off。QMT 策略侧仍是 SIMULATION，委托由客户端模拟，
+      # 不落真实券商。
       - /home/shuyolin/trading/quantTrader/config.qmt_bridge.live.json:/app/config/config.json:ro
       # live 客户端 bqbox；策略侧 file.root=bqbox/trade，容器侧 /app/bqbox/trade
       - /mnt/d/国金证券QMT交易端/bin.x64/bqbox:/app/bqbox
