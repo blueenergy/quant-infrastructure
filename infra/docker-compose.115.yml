@@ -6,8 +6,10 @@
 
 services:
   mongodb:
-    # Primary 为 6.0 时 Secondary 必须同大版本（7.0 拒绝 6.0 wire version 心跳）
-    image: mongo:6.0
+    # 2026-11-07 升 7.0，与本机 rs0 primary 对齐（原注释「Primary 为 6.0 时
+    # Secondary 必须同大版本」已随 115 独立单成员 rs0 失效）。
+    # 先只换镜像、FCV 保持 6.0；观察后再 setFeatureCompatibilityVersion。
+    image: mongo:7.0
     volumes: !override
       - mongodb7_data:/data/db
       - mongodb7_config:/data/configdb
