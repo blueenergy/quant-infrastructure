@@ -556,7 +556,12 @@ check_trader_mailboxes() {
       --format '{{range .Mounts}}{{if eq .Destination "/app/bqbox"}}{{.Source}}{{end}}{{end}}' \
       2>/dev/null || true)"
     if [ -z "$src" ]; then
-      warn "trader mailbox" "$svc: could not read /app/bqbox mount (container missing or not running); cannot verify which QMT client it talks to"
+      # On a full deploy the trader containers are legitimately absent
+      # (profile-gated). Only an explicitly targeted service that failed to
+      # come up deserves a warning.
+      if [ "${#SERVICES[@]}" -gt 0 ]; then
+        warn "trader mailbox" "$svc: targeted but no /app/bqbox mount found (container missing or not running); cannot verify which QMT client it talks to"
+      fi
       continue
     fi
     case "$svc" in

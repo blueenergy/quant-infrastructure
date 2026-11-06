@@ -67,10 +67,17 @@ else
 fi
 
 out="$(run_body 'SERVICES=(quant-trader); docker() { return 1; }; check_trader_mailboxes')"
-if printf '%s' "$out" | grep -q "could not read /app/bqbox mount"; then
-  pass "missing container is reported"
+if printf '%s' "$out" | grep -q "targeted but no /app/bqbox mount"; then
+  pass "targeted missing container is reported"
 else
-  fail "missing container should be reported: $out"
+  fail "targeted missing container should be reported: $out"
+fi
+
+out="$(run_body 'SERVICES=(); docker() { return 1; }; check_trader_mailboxes')"
+if printf '%s' "$out" | grep -q "WARN"; then
+  fail "full deploy should skip absent profile-gated containers: $out"
+else
+  pass "full deploy skips absent containers"
 fi
 
 echo
