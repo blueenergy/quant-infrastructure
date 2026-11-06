@@ -534,6 +534,44 @@ check_disk_pressure() {
   fi
 }
 
+# A trader container that binds the wrong bqbox starts cleanly and looks alive:
+# the QMT model is running and answering, just on the other mailbox. The client
+# then polls an empty directory until ping times out and crash-loops. The sim
+# container needs the E: drive client from docker-compose.local.yml; the live
+# container needs the D: drive live client from the base file. Dropping the
+# local overlay once cost a crash-loop on 2026-10-31 and again on 2026-11-06,
+# so the check is mechanical now instead of relying on remembering the flag.
+check_trader_mailboxes() {
+  local svc container src expect target
+  for svc in quant-trader quant-trader-live; do
+    if [ "${#SERVICES[@]}" -gt 0 ]; then
+      target=0
+      for t in "${SERVICES[@]}"; do
+        [ "$t" = "$svc" ] && target=1
+      done
+      [ "$target" -eq 1 ] || continue
+    fi
+    container="$svc"
+    src="$(docker inspect "$container" \
+      --format '{{range .Mounts}}{{if eq .Destination "/app/bqbox"}}{{.Source}}{{end}}{{end}}' \
+      2>/dev/null || true)"
+    if [ -z "$src" ]; then
+      warn "trader mailbox" "$svc: could not read /app/bqbox mount (container missing or not running); cannot verify which QMT client it talks to"
+      continue
+    fi
+    case "$svc" in
+      quant-trader)      expect="/mnt/e/国金QMT交易端模拟/" ;;
+      quant-trader-live) expect="/mnt/d/国金证券QMT交易端/" ;;
+    esac
+    case "$src" in
+      "$expect"*) : ;;
+      *)
+        warn "trader mailbox" "$svc: /app/bqbox -> $src (expected under $expect). The other QMT client will not answer this mailbox; expect 'file rpc timeout: ping' and a crash-loop. Did you drop -f docker-compose.local.yml?"
+        ;;
+    esac
+  done
+}
+
 main() {
   SERVICES=("$@")
   require_files
@@ -614,6 +652,8 @@ main() {
 
   log "Deployed containers:"
   "${COMPOSE[@]}" ps
+
+  check_trader_mailboxes
 
   # The old line here was `docker image prune -f`, which removes only *dangling*
   # images. Every release carries a sha-* tag, so a superseded one is never
