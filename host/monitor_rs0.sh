@@ -73,6 +73,16 @@ send_dingtalk() {
   log "NOTIFY sent: $title"
 }
 
+# ── 告警归因：把异常交给 agent-autoloop（只读诊断，失败不影响钉钉）──────
+emit_autoloop() {
+  local title="$1" content="$2" bin="$HOME/.local/bin/agent-autoloop"
+  [ -x "$bin" ] || { log "autoloop emit skipped: $bin not executable"; return 0; }
+  PATH="$HOME/.local/bin:$HOME/.local/node24/bin:$PATH" \
+    timeout 15 "$bin" emit system.alert \
+      --summary "monitor_rs0: $title $content" \
+      --detail "$content" >> "$LOG" 2>&1 || log "autoloop emit failed: $title"
+}
+
 # ── 检查项 ────────────────────────────────────────────────────────────────
 port_ok() { ss -tln 2>/dev/null | grep -q ':27017 '; }
 
@@ -153,6 +163,7 @@ now=$(date +%s)
 if [ "$status" = "BAD" ]; then
   if [ "$LAST_STATUS" != "BAD" ] || [ $(( now - LAST_ALERT )) -ge "$RE_ALERT_SEC" ]; then
     send_dingtalk "异常" "$bad"
+    emit_autoloop "异常" "$bad"
     sed -i "s/^LAST_ALERT=.*/LAST_ALERT=$now/" "$STATE"
   fi
 elif [ "$LAST_STATUS" = "BAD" ]; then
