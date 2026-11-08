@@ -1,4 +1,4 @@
-# Weekday pipeline after quant-scorer (~19:00): materialize hs300/a500/csi1000 current → shadow.
+# Weekday pipeline after quant-scorer (~19:00): materialize hs300/a500 current → shadow.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -34,9 +34,6 @@ spec:
                     --canonical --register-mongo
                   python -m quant_model_platform.tools.materialize_snapshot \
                     --index-code a500 --start-date 20230101 --end-date latest \
-                    --canonical --register-mongo
-                  python -m quant_model_platform.tools.materialize_snapshot \
-                    --index-code csi1000 --start-date 20230101 --end-date latest \
                     --canonical --register-mongo
                   python -m quant_model_platform.workers.shadow_loop --once
               envFrom:
