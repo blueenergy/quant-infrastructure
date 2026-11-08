@@ -33,4 +33,4 @@ images:
     newTag: sha-9ba207a
   - name: quant-model-trainer:latest
     newName: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-model-trainer
-    newTag: sha-b7fa7a3
+    newTag: sha-4ef007f
