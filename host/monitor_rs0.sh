@@ -5,7 +5,7 @@
 #   1. host 上 27017 端口有监听（mirrored 模式下由 docker-proxy 发布）
 #   2. quant-mongodb 容器 healthcheck = healthy
 #   3. mongod 是 PRIMARY（isWritablePrimary）—— 覆盖 REMOVED / 非主状态
-#   4. Mac secondary(192.168.3.5) 心跳健康、optime 滞后、是否掉出 oplog 窗口
+#   4. 灾备 secondary（按副本集成员 _id 匹配，不写死 IP）心跳健康、optime 滞后、是否掉出 oplog 窗口
 #
 # 告警：钉钉机器人（与数据合约告警共用，加签模式），只在状态翻转时发送；
 #       持续异常每 RE_ALERT_SEC 补发一次；未配置 webhook 时只写日志。
@@ -94,10 +94,10 @@ container_healthy() {
 # 失败时输出错误文本，由调用方判解析失败。
 mongo_metrics() {
   local js='const st = rs.status();
-// 不能写死主机 IP：WSL 重启后 LAN IP 会变（旧值 192.168.3.9 已失效，
-// 导致 me=undefined、lag/window 恒为 -1、Mac 滞后告警静默）。按状态取主库。
+// 不能写死主机 IP：WSL 重启或 Mac 换网络后地址会变（旧值 192.168.3.9 / .5 都变过），
+// 按状态取主库、按 _id 取灾备成员，避免 IP 漂移导致 lag/window 恒为 -1、告警静默。
 const me = st.members.find(m => m.stateStr === "PRIMARY");
-const sec = st.members.find(m => m.name.indexOf("192.168.3.5") === 0);
+const sec = me ? st.members.find(m => m._id !== me._id) : null;
 const w = db.hello().isWritablePrimary;
 const lag = (me && me.optimeDate && sec && sec.optimeDate) ? Math.round((me.optimeDate - sec.optimeDate) / 1000) : -1;
 // $natural 顺序 = oplog 写入顺序 = ts 升序；按 ts 排序会强制 COLLSCAN + 全量排序
