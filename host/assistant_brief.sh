@@ -9,9 +9,9 @@
 # Cron (local WSL; use `bash`, not direct execution — core.fileMode=false
 # strips the exec bit in this repo):
 #   0 8 * * 1-5  bash /home/shuyolin/trading/quant-infrastructure/host/assistant_brief.sh morning >> /home/shuyolin/trading/logs/assistant_brief.log 2>&1
-#   26 9 * * 1-5 bash /home/shuyolin/trading/quant-infrastructure/host/assistant_brief.sh auction >> /home/shuyolin/trading/logs/assistant_brief.log 2>&1
-#     (26 分，等 09:25:15 的部分特征落库；09:25:00 会读到空)
-#   30 15 * * 1-5 bash /home/shuyolin/trading/quant-infrastructure/host/assistant_brief.sh close  >> /home/shuyolin/trading/logs/assistant_brief.log 2>&1
+#   27 9 * * 1-5 bash /home/shuyolin/trading/quant-infrastructure/host/assistant_brief.sh auction >> /home/shuyolin/trading/logs/assistant_brief.log 2>&1
+#     (27 分，等 09:26:12 的完整特征落库；09:26:01 会读到 partial 行)
+#   40 16 * * 1-5 bash /home/shuyolin/trading/quant-infrastructure/host/assistant_brief.sh close  >> /home/shuyolin/trading/logs/assistant_brief.log 2>&1
 set -euo pipefail
 
 REPO="${REPO:-/home/shuyolin/trading/quant-infrastructure}"
