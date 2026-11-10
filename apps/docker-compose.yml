@@ -543,7 +543,7 @@ services:
       - TZ=Asia/Shanghai
       - QUANT_TRADER_EXECUTION_OUTBOX_PATH=/app/data/execution_outbox.json
     volumes:
-      # 实盘配置：user_id=shuyolin / 8885156549 / rpc_allow_order_methods=true /
+      # 实盘配置：user_id=blue_energy / 8885156549 / rpc_allow_order_methods=true /
       # execution_events_mode=off。QMT 策略侧仍是 SIMULATION，委托由客户端模拟，
       # 不落真实券商。
       - /home/shuyolin/trading/quantTrader/config.qmt_bridge.live.json:/app/config/config.json:ro
