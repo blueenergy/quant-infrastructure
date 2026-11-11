@@ -11,3 +11,13 @@ services:
   quant-trader:
     volumes:
       - /mnt/e/国金QMT交易端模拟/bin.x64/bqbox:/app/bqbox
+
+  quant-scorer:
+    # 日终 core 带 csi2000 时 3831 只股票，2026-11-10 峰值 RSS 7.3G，8g 上限
+    # 把整个 score_util.py 进程 OOM kill。12g 留出余量；内存/OOM 由
+    # agent-autoloop 的「评分健康监控」规则每 5 分钟检查并推飞书。
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 12g
