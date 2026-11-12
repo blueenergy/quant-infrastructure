@@ -238,10 +238,7 @@ if command -v firewall-cmd &> /dev/null; then
     
     # MongoDB
     firewall-cmd --permanent --add-port=27017/tcp || log_warning "MongoDB 端口配置失败"
-    
-    # Redis
-    firewall-cmd --permanent --add-port=6379/tcp || log_warning "Redis 端口配置失败"
-    
+
     # API Server
     firewall-cmd --permanent --add-port=5000/tcp || log_warning "API Server 端口配置失败"
     
@@ -258,7 +255,6 @@ elif command -v ufw &> /dev/null; then
     log_info "检测到 ufw，配置端口..."
     
     ufw allow 27017/tcp comment 'MongoDB'
-    ufw allow 6379/tcp comment 'Redis'
     ufw allow 5000/tcp comment 'API Server'
     ufw allow 3001/tcp comment 'FastAPI Gateway'
     ufw allow 5173/tcp comment 'Dashboard'
@@ -334,7 +330,7 @@ cat > "${USER_HOME}/start-services.sh" << 'EOF'
 
 echo "启动基础设施服务..."
 cd ~/trading/quant-infrastructure/infra
-docker compose up -d mongodb redis
+docker compose up -d mongodb
 
 echo ""
 echo "等待 MongoDB 就绪..."
@@ -404,7 +400,7 @@ echo "     python3 -m venv .venv"
 echo "     source .venv/bin/activate"
 echo "     pip install -r requirements.txt"
 echo ""
-echo "  4. 启动基础设施 (MongoDB, Redis):"
+echo "  4. 启动基础设施 (MongoDB):"
 echo "     cd ~/trading/quant-infrastructure/infra"
 echo "     docker compose up -d"
 echo ""

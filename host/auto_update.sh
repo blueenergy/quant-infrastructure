@@ -36,7 +36,7 @@ if ! git pull >>"$LOG" 2>&1; then
   exit 1
 fi
 
-# ---- infra（hermes/mongo/redis 等；Docker Hub 镜像可能卡住）----
+# ---- infra（hermes/mongo 等；Docker Hub 镜像可能卡住）----
 if [ -d "$REPO/infra" ]; then
   cd "$REPO/infra" || exit 1
   log "Updating infra..."

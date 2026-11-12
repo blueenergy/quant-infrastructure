@@ -1,6 +1,9 @@
 # Quant Infrastructure
 
-完整的量化交易基础设施部署方案，包含 MongoDB、Redis、监控系统。
+完整的量化交易基础设施部署方案，包含 MongoDB、监控系统。
+
+> **Redis 已于 2026-11-12 停用**（全仓无业务调用，长期 0 key / 0 命中），
+> 默认不启动；仅在显式 `--profile redis` 时拉起。
 
 > 本目录为基础设施栈，与 `../apps/`（业务应用栈）并列。所有 `docker compose`
 > 命令均在**本目录（`infra/`）下执行**。Compose 项目名通过 `docker-compose.yml`
@@ -9,7 +12,7 @@
 ## 📋 组件
 
 - **MongoDB 7.0**: 主数据库，存储历史数据、交易信号、持仓等
-- **Redis 7**: 内存数据库，用于实时 tick 数据缓存和 Pub/Sub
+- **Redis 7** (已停用 2026-11-12): 原用于实时 tick 数据缓存和 Pub/Sub，现无业务调用，归于 `redis` profile（默认不启动）
 - **Prometheus** (草稿，未真正启用): 监控系统，归于 `monitoring` profile
 - **Grafana** (草稿，未真正启用): 可视化面板，归于 `monitoring` profile
 - **Portainer** (可选): 单机 Docker 容器管理面板
@@ -98,8 +101,8 @@ docker compose -f docker-compose.yml -f docker-compose.115.yml up -d mongodb
 # 测试 MongoDB
 mongosh mongodb://admin:password@localhost:27017/finance?authSource=admin
 
-# 测试 Redis
-redis-cli -h localhost -p 6379 ping
+# 测试 Redis（已停用；仅启用 --profile redis 后需要）
+# redis-cli -h localhost -p 6379 ping
 ```
 
 ## 📡 服务访问
@@ -107,7 +110,7 @@ redis-cli -h localhost -p 6379 ping
 | 服务 | 地址 | 默认端口 |
 |-----|------|---------|
 | MongoDB | `mongodb://localhost:27017` | 27017 |
-| Redis | `redis://localhost:6379` | 6379 |
+| Redis | `redis://localhost:6379`（已停用，需 `--profile redis`） | 6379 |
 | Prometheus | `http://localhost:9090` | 9090 |
 | Grafana | `http://localhost:3000` | 3000 |
 | Portainer | `http://localhost:9000` | 9000 |
@@ -120,7 +123,7 @@ redis-cli -h localhost -p 6379 ping
 - 密码: 在 `.env` 中设置
 - 连接串: `mongodb://admin:<password>@localhost:27017/?authSource=admin`
 
-**Redis**:
+**Redis** (已停用，仅在 `--profile redis` 时适用):
 - 密码: 在 `.env` 中设置
 
 **Grafana** (可选):
@@ -145,7 +148,7 @@ redis-cli -h localhost -p 6379 ping
 | 服务 | 最大内存 | 预留内存 | CPU限制 |
 |-----|---------|---------|--------|
 | MongoDB | 1.5GB | 800MB | 2核 |
-| Redis | 512MB | 100MB | 0.5核 |
+| Redis（已停用） | 512MB | 100MB | 0.5核 |
 | Prometheus | 200MB | - | 0.5核 |
 | Grafana | 200MB | - | 0.5核 |
 | Portainer | 200MB | - | 0.5核 |
@@ -159,7 +162,10 @@ redis-cli -h localhost -p 6379 ping
 docker compose up -d
 
 # 只启动数据库（不启动监控）
-docker compose up -d mongodb redis
+docker compose up -d mongodb
+
+# 启用已停用的 Redis（显式 profile）
+docker compose --profile redis up -d redis
 
 # 启动监控（需要 --profile）
 docker compose --profile monitoring up -d
@@ -192,9 +198,6 @@ docker compose logs -f
 # 查看 MongoDB 日志
 docker compose logs -f mongodb
 
-# 查看 Redis 日志
-docker compose logs -f redis
-
 # 最近 100 行
 docker compose logs --tail=100 mongodb
 ```
@@ -221,8 +224,8 @@ watch -n 5 ./scripts/monitor.sh
 # 进入 MongoDB
 docker exec -it quant-mongodb mongosh -u admin -p password --authenticationDatabase admin
 
-# 进入 Redis
-docker exec -it quant-redis redis-cli
+# 进入 Redis（已停用；仅启用 --profile redis 后需要）
+# docker exec -it quant-redis redis-cli
 
 # 查看 MongoDB 数据库
 docker exec quant-mongodb mongosh -u admin -p password --authenticationDatabase admin --eval "show dbs"
@@ -230,8 +233,8 @@ docker exec quant-mongodb mongosh -u admin -p password --authenticationDatabase 
 # 查看集合
 docker exec quant-mongodb mongosh finance -u admin -p password --authenticationDatabase admin --eval "show collections"
 
-# Redis 信息
-docker exec quant-redis redis-cli INFO
+# Redis 信息（已停用；仅启用 --profile redis 后需要）
+# docker exec quant-redis redis-cli INFO
 ```
 
 ## 📂 目录结构
@@ -244,8 +247,8 @@ infra/                          # 本目录（基础设施栈）
 ├── mongodb/
 │   ├── mongod.conf             # MongoDB 配置
 │   └── mongo-init.js           # 初始化脚本
-├── redis/
-│   └── redis.conf              # Redis 配置
+├── redis/                      # 已停用（redis profile），仅保留配置供恢复
+│   └── redis.conf
 ├── prometheus/                 # ⚠️ 草稿，未真正启用（monitoring profile）
 │   └── prometheus.yml
 ├── grafana/                    # ⚠️ 草稿，未真正启用（monitoring profile）
@@ -259,6 +262,8 @@ infra/                          # 本目录（基础设施栈）
 ```
 
 ## 🔗 业务系统集成
+
+> ⚠️ 下列 `REDIS_*` 环境变量已无任何消费者（Redis 于 2026-11-12 停用），不要再新配。
 
 ### quantFinance (后端API)
 
@@ -304,7 +309,7 @@ cat mongodb/mongod.conf
 docker volume inspect quant-infrastructure_mongodb7_data
 ```
 
-### Redis 无法连接
+### Redis 无法连接（仅 `--profile redis` 启用时）
 
 ```bash
 # 检查端口
@@ -336,7 +341,7 @@ docker compose up -d
 - 索引前缀压缩
 - 90天数据自动清理
 
-### Redis
+### Redis（已停用，仅作恢复参考）
 
 - LRU 淘汰策略
 - AOF 持久化（每秒同步）

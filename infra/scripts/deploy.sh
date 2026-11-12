@@ -42,10 +42,8 @@ set +a
 echo "📋 Deployment Configuration:"
 echo "  • MongoDB: mongo:7.0"
 echo "    - Auth: enabled"
-echo "  • Redis: redis:7-alpine"
 echo "  • Memory Limits:"
 echo "    - MongoDB: 1.5GB (reserved: 800MB)"
-echo "    - Redis: 512MB (reserved: 100MB)"
 echo ""
 read -p "Continue with deployment? (y/N) " -n 1 -r
 echo
@@ -62,7 +60,7 @@ docker compose pull
 # 启动服务
 echo ""
 echo "🔧 Starting services..."
-docker compose up -d mongodb redis
+docker compose up -d mongodb
 
 # 等待服务就绪
 echo ""
@@ -86,18 +84,6 @@ else
     exit 1
 fi
 
-# 检查 Redis
-echo -n "  Redis... "
-if docker exec quant-redis redis-cli ping 2>/dev/null | grep -q PONG; then
-    echo "✅"
-else
-    echo "❌ Redis is not responding"
-    echo ""
-    echo "Logs:"
-    docker compose logs redis
-    exit 1
-fi
-
 # 显示容器状态
 echo ""
 echo "📊 Container Status:"
@@ -106,7 +92,7 @@ docker compose ps
 # 显示资源使用
 echo ""
 echo "💾 Resource Usage:"
-docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}" quant-mongodb quant-redis
+docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}" quant-mongodb
 
 # 成功提示
 echo ""
@@ -116,11 +102,9 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 echo "📡 Service Endpoints:"
 echo "  • MongoDB: mongodb://localhost:27017"
-echo "  • Redis:   redis://localhost:6379"
 echo ""
 echo "🔐 Default Credentials (change in .env):"
 echo "  • MongoDB: ${MONGO_USERNAME:-admin} / (password in .env)"
-echo "  • Redis:   (password in .env)"
 echo ""
 echo "📖 Useful Commands:"
 echo "  • View logs:    docker compose logs -f"

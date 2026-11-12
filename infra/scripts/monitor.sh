@@ -49,34 +49,7 @@ else
 fi
 echo ""
 
-# Redis 状态
-echo "🔴 Redis Status:"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-if docker exec quant-redis redis-cli ping > /dev/null 2>&1; then
-    docker exec quant-redis redis-cli INFO | grep -E "redis_version|uptime_in_seconds|used_memory_human|connected_clients|total_commands_processed" | while IFS=: read -r key value; do
-        case $key in
-            redis_version)
-                echo "  Version: $value"
-                ;;
-            uptime_in_seconds)
-                hours=$(echo "scale=2; $value / 3600" | bc)
-                echo "  Uptime: $hours hours"
-                ;;
-            used_memory_human)
-                echo "  Memory: $value"
-                ;;
-            connected_clients)
-                echo "  Clients: $value"
-                ;;
-            total_commands_processed)
-                echo "  Commands: $value"
-                ;;
-        esac
-    done
-else
-    echo "  ❌ Redis not running"
-fi
-echo ""
+# Redis 已停用（2026-11-12），不再纳入监控；需要时 docker compose --profile redis up -d redis
 
 # 磁盘使用
 echo "💾 Disk Usage:"

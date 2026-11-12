@@ -48,7 +48,8 @@ services:
       start_period: 40s
 
   # ========================
-  # Redis 内存数据库
+  # Redis 内存数据库（已停用 2026-11-12：全仓无业务调用，DBSIZE=0）
+  # 默认不启动。需要时：docker compose --profile redis up -d redis
   # ========================
   redis:
     image: redis:7-alpine
@@ -63,6 +64,8 @@ services:
     mem_limit: 512m           # 512MB 限制
     mem_reservation: 100m     # 预留 100MB
     cpus: '0.5'               # 限制 0.5 核
+    profiles:
+      - redis
     restart: unless-stopped
     networks:
       - quant-network

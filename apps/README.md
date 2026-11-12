@@ -113,8 +113,8 @@ cp env/quant-data-engine.env.example env/quant-data-engine.env
 Use **`docker-compose.dev.yml`** — not `deploy.sh` and not production `docker-compose.yml`.
 
 ```bash
-# Infra network + Mongo/Redis (once)
-cd ../infra && docker compose up -d mongodb redis
+# Infra network + Mongo (once; Redis 已停用，需要时 --profile redis)
+cd ../infra && docker compose up -d mongodb
 
 cd ~/trading/quant-infrastructure/apps
 cp -n .env.example .env   # first time; edit secrets
