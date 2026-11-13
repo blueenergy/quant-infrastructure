@@ -90,7 +90,9 @@ def main() -> int:
         )
         lines: List[str] = []
         for doc in docs:
-            key = f"task:{doc['_id']}:{status}"
+            # One alert per task, even when it moves between terminal states
+            # (e.g. stale -> failed after the reclaimer marks it too_old).
+            key = f"task:{doc['_id']}"
             if recently_alerted(key):
                 continue
             lines.append(
@@ -124,7 +126,7 @@ def main() -> int:
     )
     stale_lines: List[str] = []
     for doc in stale_docs:
-        key = f"task:{doc['_id']}:stale"
+        key = f"task:{doc['_id']}"
         if recently_alerted(key):
             continue
         age = _age_minutes(doc.get("started_at") or doc.get("updated_at"), now)
