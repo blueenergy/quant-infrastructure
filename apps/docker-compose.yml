@@ -263,7 +263,7 @@ services:
   # and stop this profile before running the K8s Deployment against the same
   # queue.
   quant-factor-researcher:
-    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer:${QUANT_SCORER_IMAGE_TAG:-latest}
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-factor-research:${QUANT_FACTOR_RESEARCH_IMAGE_TAG:-latest}
     container_name: quant-factor-researcher
     profiles: ["factor-research-local"]
     restart: unless-stopped
