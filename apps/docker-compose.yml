@@ -347,11 +347,10 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  # [MIGRATED] Portfolio planning and paper-trading role from the
-  # stock-scoring-system image. It owns plan-generation polling and paper
-  # execution/mark-to-market cron jobs.
+  # [MIGRATED] Portfolio planning and paper-trading role, now its own image.
+  # It owns plan-generation polling and paper execution/mark-to-market cron jobs.
   quant-portfolio:
-    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer:${QUANT_SCORER_IMAGE_TAG:-latest}
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-portfolio:${QUANT_PORTFOLIO_IMAGE_TAG:-latest}
     container_name: quant-portfolio
     profiles: ["portfolio-local"]
     restart: unless-stopped
