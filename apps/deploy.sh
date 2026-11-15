@@ -309,7 +309,7 @@ _service_external_k8s() {
   local svc="$1"
   local runtime
   case "$svc" in
-    quant-researcher) runtime="$(_common_env_get PORTFOLIO_RESEARCH_RUNTIME)" ;;
+    quant-portfolio-researcher) runtime="$(_common_env_get PORTFOLIO_RESEARCH_RUNTIME)" ;;
     quant-factor-researcher) runtime="$(_common_env_get FACTOR_BACKTEST_RUNTIME)" ;;
     quant-model-trainer) runtime="$(_common_env_get MODEL_TRAINING_RUNTIME)" ;;
     quant-scorer) runtime="$(_common_env_get QUANT_SCORER_RUNTIME)" ;;
@@ -326,7 +326,7 @@ _service_external_k8s() {
 _service_compose_profile() {
   local svc="$1"
   case "$svc" in
-    quant-researcher) echo "research-local" ;;
+    quant-portfolio-researcher) echo "research-local" ;;
     quant-factor-researcher) echo "factor-research-local" ;;
     quant-model-trainer) echo "model-trainer-local" ;;
     quant-scorer) echo "scorer-local" ;;
@@ -341,7 +341,7 @@ _service_compose_profile() {
 _runtime_env_key_for_service() {
   local svc="$1"
   case "$svc" in
-    quant-researcher) echo "PORTFOLIO_RESEARCH_RUNTIME" ;;
+    quant-portfolio-researcher) echo "PORTFOLIO_RESEARCH_RUNTIME" ;;
     quant-factor-researcher) echo "FACTOR_BACKTEST_RUNTIME" ;;
     quant-model-trainer) echo "MODEL_TRAINING_RUNTIME" ;;
     quant-scorer) echo "QUANT_SCORER_RUNTIME" ;;
@@ -368,7 +368,7 @@ filter_services_for_external_runtimes() {
 
 stop_local_services_for_external_runtimes() {
   local svc profile runtime_key any_external=0
-  for svc in quant-researcher quant-factor-researcher quant-model-trainer quant-scorer quant-portfolio quant-data-engine backtest-worker backtest-screening quant-analyzer; do
+  for svc in quant-portfolio-researcher quant-factor-researcher quant-model-trainer quant-scorer quant-portfolio quant-data-engine backtest-worker backtest-screening quant-analyzer; do
     if _service_external_k8s "$svc"; then
       any_external=1
       profile="$(_service_compose_profile "$svc")"

@@ -211,16 +211,16 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  # [MIGRATED] Portfolio research role from the stock-scoring-system image.
+  # [MIGRATED] Portfolio research role (quant-portfolio-research image).
   # It consumes research jobs and writes reports to the shared volume read by
   # quant-api. Profile research-local keeps it on this Compose host; omit the
   # profile (PORTFOLIO_RESEARCH_RUNTIME=external_k8s) when workers run in K8s.
-  quant-researcher:
-    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer:${QUANT_SCORER_IMAGE_TAG:-latest}
-    container_name: quant-researcher
+  quant-portfolio-researcher:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-portfolio-research:${QUANT_PORTFOLIO_RESEARCH_IMAGE_TAG:-latest}
+    container_name: quant-portfolio-researcher
     profiles: ["research-local"]
     restart: unless-stopped
-    command: ["/app/start.researcher.sh"]
+    command: ["/app/start.portfolio-researcher.sh"]
     env_file:
       - env/common.env
       - env/quant-scorer.env
@@ -231,7 +231,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./logs/quant-researcher:/app/logs
+      - ./logs/quant-portfolio-researcher:/app/logs
       - portfolio_research:/app/reports/portfolio-research
     networks:
       - quant-net
@@ -257,7 +257,7 @@ services:
         max-file: "3"
 
   # Alpha158 factor backtest queue worker from the stock-scoring-system image.
-  # Kept separate from quant-researcher because a single factor job runs
+  # Kept separate from quant-portfolio-researcher because a single factor job runs
   # 30-75 minutes and peaks near 5GB: sharing that loop would block every
   # research job queued behind it. Set FACTOR_BACKTEST_RUNTIME=external_k8s
   # and stop this profile before running the K8s Deployment against the same
@@ -676,7 +676,7 @@ services:
         max-file: "3"
 
 volumes:
-  # Shared between quant-researcher and quant-api (portfolio research reports).
+  # Shared between quant-portfolio-researcher and quant-api (portfolio research reports).
   portfolio_research:
     driver: local
   # backtest-worker job cache (strategy code, data frames, etc.)

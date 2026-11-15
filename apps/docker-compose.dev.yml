@@ -403,21 +403,19 @@ services:
   # Profile research-local: enable for local_docker runtime (default via
   # COMPOSE_PROFILES in apps/.env). Omit the profile when research runs on
   # external K8s — see apps/README "Portfolio research runtime".
-  quant-researcher:
+  quant-portfolio-researcher:
     build:
-      context: ../../stock-scoring-system
+      context: ../../quant-portfolio-research
       dockerfile: Dockerfile
-    container_name: quant-researcher
+    container_name: quant-portfolio-researcher
     profiles: [ "research-local" ]
-    command: [ "/app/start.researcher.sh" ]
+    command: [ "/app/start.portfolio-researcher.sh" ]
     env_file:
-      - path: ../../stock-scoring-system/.env
+      - path: ../../quant-portfolio-research/.env
         required: false
     environment:
       - MONGO_URI=${DOCKER_MONGO_URI:-mongodb://quant-mongodb:27017/}
       - MONGO_DB=${MONGO_DB}
-      - TUSHARE_TOKEN=${TUSHARE_TOKEN}
-      - MAX_WORKERS=${SCORING_MAX_WORKERS:-6}
       - TZ=Asia/Shanghai
       - PORTFOLIO_RESEARCH_REPORT_DIR=/app/reports/portfolio-research
       - PORTFOLIO_RESEARCH_RUNTIME=${PORTFOLIO_RESEARCH_RUNTIME:-local_docker}
@@ -425,7 +423,7 @@ services:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
     volumes:
-      - ../../stock-scoring-system/logs/researcher:/app/logs
+      - ../../quant-portfolio-research/logs:/app/logs
       - ../../shared/portfolio-research:/app/reports/portfolio-research
     networks:
       - quant-network
@@ -485,7 +483,7 @@ services:
         max-file: "3"
 
   # 因子回测 (Alpha158 筛选 loop)
-  # 独立于 quant-researcher: 单个因子任务要跑 30~75 分钟并占用约 5GB,
+  # 独立于 quant-portfolio-researcher: 单个因子任务要跑 30~75 分钟并占用约 5GB,
   # 混在同一个 loop 里会把排在后面的组合研究任务全部堵死。
   quant-factor-researcher:
     build:
