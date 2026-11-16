@@ -158,6 +158,20 @@ expand_mcp_services() {
   _append_service_if_missing quant-mcp-actions
 }
 
+# The quant-api pre-hook removes quant-scheduler together with quant-api so a
+# legacy `docker run` container cannot block compose's container_name target.
+# A targeted `./deploy.sh quant-api` must therefore bring scheduler back, or it
+# disappears until the next full deploy.
+expand_api_companion_services() {
+  [ "${#SERVICES[@]}" -eq 0 ] && return 0
+  local svc wants_scheduler=0
+  for svc in "${SERVICES[@]}"; do
+    [ "$svc" = "quant-api" ] && wants_scheduler=1
+  done
+  [ "$wants_scheduler" = 1 ] || return 0
+  _append_service_if_missing quant-scheduler
+}
+
 filter_mcp_services_on_115() {
   _host_is_115 || return 0
   [ "${#SERVICES[@]}" -eq 0 ] && return 0
@@ -591,6 +605,7 @@ main() {
     explicit_services=1
   fi
   expand_mcp_services
+  expand_api_companion_services
   filter_mcp_services_on_115
   filter_services_on_115
   stop_mcp_on_115

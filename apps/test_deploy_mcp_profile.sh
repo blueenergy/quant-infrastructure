@@ -36,6 +36,38 @@ with_env() {
   return 1
 }
 
+echo "== expand_api_companion_services"
+
+if with_env "" "" '
+  SERVICES=(quant-api)
+  expand_api_companion_services
+  printf "%s\n" "${SERVICES[@]}" | grep -qx quant-scheduler
+'; then
+  pass "quant-api roll re-adds quant-scheduler"
+else
+  fail "quant-api roll re-adds scheduler"
+fi
+
+if with_env "" "" '
+  SERVICES=(quant-web)
+  expand_api_companion_services
+  ! printf "%s\n" "${SERVICES[@]}" | grep -qx quant-scheduler
+'; then
+  pass "non-api roll does not add scheduler"
+else
+  fail "non-api roll adds scheduler"
+fi
+
+if with_env "" "" '
+  SERVICES=(quant-api quant-scheduler)
+  expand_api_companion_services
+  [ "$(printf "%s\n" "${SERVICES[@]}" | grep -cx quant-scheduler)" = 1 ]
+'; then
+  pass "scheduler is not duplicated"
+else
+  fail "scheduler duplicated"
+fi
+
 echo "== apply_mcp_profile"
 
 if with_env "" "" '
