@@ -4,7 +4,7 @@
 
 | 脚本 | 用途 | 运行环境 |
 |---|---|---|
-| [`llm-status.py`](./llm-status.py) | 一条命令查 Ark key 池 + MiniMax Token Plan 额度 | WSL 开发机 |
+| [`llm-status.py`](./llm-status.py) | 一条命令查 Ark / MiniMax / 百炼三家的剩余额度 | WSL 开发机 |
 | [`bump-versions-env.sh`](./bump-versions-env.sh) | 由 app 仓库 CI 调用，bump `apps/versions.env` + 写 CHANGELOG | GitHub Actions |
 | [`wait-for-acr-tag.sh`](./wait-for-acr-tag.sh) | 阻塞等待镜像 tag 在阿里云 ACR 可读，避免空部署 | GitHub Actions |
 | [`notify_ci_dingtalk.py`](./notify_ci_dingtalk.py) | CI 失败时发钉钉 markdown 告警 | GitHub Actions |
@@ -12,17 +12,20 @@
 
 ## llm-status.py
 
-一条命令查两个 Claude Code 后端的剩余额度：
+一条命令查三个 Claude Code 后端的剩余额度：
 
 - **Ark key 池**（`ccp`）：读本机 `ark-proxy` 的 `/status`，把 `cooldown_until`
   的 unix 时间戳转成 `11-27 23:59`，并给出剩余时间
 - **MiniMax Token Plan**（`ccm`）：调 `https://api.minimax.io/v1/token_plan/remains`，
   显示本期窗口（5 小时）和本周池的**剩余百分比**
+- **百炼 Token Plan**（`ccb/ccq`）：跑 `bl usage token-plan --output json`；正常时
+  显示各窗口剩余百分比，控制台没返回数据时打「套餐异常」提示
 
 ```bash
-./scripts/llm-status.py            # 两块都查
+./scripts/llm-status.py            # 三家都查
 ./scripts/llm-status.py --ark      # 只看 Ark
 ./scripts/llm-status.py --minimax  # 只看 MiniMax
+./scripts/llm-status.py --bailian  # 只看百炼
 ./scripts/llm-status.py --raw      # 原始 JSON
 ```
 
@@ -42,13 +45,24 @@ MODEL           本期剩余  本期结束     本期倒计时  本周剩余  �
 --------------  --------  -----------  ----------  --------  -----------  ----------
 general         45%       11-17 13:00  53m         83%       11-23 08:00  5d19h
 video (未启用)  100%      11-18 08:00  19h53m      100%      11-23 08:00  5d19h
+
+== 百炼 Token Plan (ccb/ccq) ==  bl usage token-plan
+
+⚠️  套餐异常：控制台没有返回额度数据（hasQuotaData=false）
+    ccb/ccq 当前不可用，常见原因：
+    - 套餐已过期或未续费
+    - Console 登录的阿里云账号 ≠ 购买套餐的账号
+    - key 已失效（模型端点会直接 403 AccessDenied.Unpurchased）
+    排查: bl auth status / 百炼控制台 Token Plan 页面
 ```
 
-- `--raw`：输出 `{"ark": {...}, "minimax": {...}}`，时间戳保持原始单位（Ark 为秒，MiniMax 为毫秒）
-- 两个数据源互不影响：一个挂了另一个照常显示，失败信息走 stderr
+- `--raw`：输出 `{"ark": {...}, "minimax": {...}, "bailian": {...}}`，时间戳保持原始单位（Ark 为秒，MiniMax 为毫秒）
+- 三个数据源互不影响：一个挂了其余照常显示，失败信息走 stderr
 - `STATE=cooldown` 但 `剩余=已到期`：代理的标记还没刷新，下次被选中时会自动转 `ok`
 - MiniMax 百分比字段是**剩余**不是已用（接口字段名叫 `usage_count`，历史坑）
-- 退出码：`0` 全部正常 / `1` 至少一块查询失败（配置文件缺失也走 `1`）
+- 百炼 `hasQuotaData=false` 表示控制台查不到订阅数据，脚本只打「套餐异常」提示，
+  **不算查询失败**（退出码仍为 `0`）；真正的登录/网络错误才记 `1`
+- 退出码：`0` 查询都成功 / `1` 至少一块查询失败（配置文件缺失也走 `1`）
 
 前置条件（都是本机个人环境，不进仓库）：
 
@@ -56,6 +70,9 @@ video (未启用)  100%      11-18 08:00  19h53m      100%      11-23 08:00  5d1
   `systemctl --user status ark-proxy` 为 running
 - `~/.claude/profiles/minimax.json` 里的 `ANTHROPIC_AUTH_TOKEN`（`sk-cp-…`）；
   注意 `sk-api-…` 的按量计费 key 调不通这个接口
+- 百炼：`bl` CLI（`npm i -g bailian-cli`）+ 控制台登录态 `bl auth login --console`；
+  Token Plan 的 `sk-sp-…` key 本身**无权**查额度
+- 脚本调用 `bl` 时按 bailian 协议带 `BAILIAN_CALLER_TYPE=script` 归因
 
 已知边界：Ark 脚本读的是代理**内存里的**状态，重启服务会清空 cooldown（但不代表
 上游额度恢复，下一次请求仍会 429 并重新标记）；`kind` 只记录**最后一次**失败的

@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""一次性查看本机 LLM 额度：Ark key 池（ccp）+ MiniMax Token Plan（ccm）。
+"""一次性查看本机 LLM 额度：Ark key 池（ccp）+ MiniMax Token Plan（ccm）
++ 百炼 Token Plan（ccb）。
 
 用法:
-    llm-status              # 两块都查
+    llm-status              # 全部查
     llm-status --ark        # 只看 Ark key 池
     llm-status --minimax    # 只看 MiniMax Token Plan
+    llm-status --bailian    # 只看百炼 Token Plan
     llm-status --raw        # 原始 JSON
 
-退出码: 0 全部正常 / 1 至少一块查询失败（配置缺失也算失败）
+退出码: 0 查询都成功 / 1 至少一块查询失败（配置缺失也算失败）。
+        百炼返回 hasQuotaData=false 视为「套餐异常」提示，不算查询失败。
 """
 
 from __future__ import annotations
@@ -15,7 +18,10 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import pathlib
+import re
+import subprocess
 import sys
 import unicodedata
 import urllib.error
@@ -25,6 +31,7 @@ ARK_CONFIG = pathlib.Path.home() / ".config/ark-proxy" / "config.json"
 ARK_STATUS_URL = "http://127.0.0.1:8787/status"
 MINIMAX_PROFILE = pathlib.Path.home() / ".claude/profiles" / "minimax.json"
 MINIMAX_URL = "https://api.minimax.io/v1/token_plan/remains"
+BAILIAN_CMD = ("bl", "usage", "token-plan", "--output", "json")
 
 
 # --------------------------------------------------------------------------
@@ -135,6 +142,38 @@ def fetch_minimax() -> tuple[dict | None, str | None]:
     return data, None
 
 
+def fetch_bailian() -> tuple[dict | None, str | None]:
+    """调用 bl CLI；套餐正常时返回 perXxxPercentage/ResetTime，异常时只有 hasQuotaData=false。"""
+    env = dict(os.environ)
+    # bailian 协议要求脚本调用使用 script 归因
+    env.setdefault("BAILIAN_CALLER_TYPE", "script")
+    env.setdefault("BAILIAN_CALLER_NAME", "claude-code")
+    try:
+        proc = subprocess.run(
+            BAILIAN_CMD, capture_output=True, text=True, timeout=30, env=env
+        )
+    except FileNotFoundError:
+        return None, "找不到 bl 命令（npm install -g bailian-cli）"
+    except subprocess.TimeoutExpired:
+        return None, "bl usage token-plan 超时（30s）"
+
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        detail = (proc.stderr or proc.stdout).strip()[:200]
+        return None, f"bl 输出不是 JSON（exit={proc.returncode}）: {detail}"
+
+    if isinstance(data, dict) and data.get("error"):
+        err = data["error"] or {}
+        message = err.get("message") or "未知错误"
+        hint = err.get("hint")
+        return None, f"{message}" + (f"；{hint}" if hint else "")
+
+    if proc.returncode != 0:
+        return None, f"bl 退出码 {proc.returncode}: {(proc.stderr or '').strip()[:160]}"
+    return data, None
+
+
 # --------------------------------------------------------------------------
 # 输出
 # --------------------------------------------------------------------------
@@ -181,7 +220,11 @@ def render_minimax(data: dict) -> None:
     rows = []
     for item in data.get("model_remains") or []:
         name = item.get("model_name", "?")
-        inactive = item.get("current_interval_status") not in (1, None)
+        # 只有本期和本周都标 3 才视为套餐未包含该池；1=正常、2=已用尽
+        inactive = (
+            item.get("current_interval_status") == 3
+            and item.get("current_weekly_status") == 3
+        )
         if inactive:
             name += " (未启用)"
         rows.append(
@@ -204,42 +247,102 @@ def render_minimax(data: dict) -> None:
     print("提示: 百分比是「剩余」不是「已用」；本期窗口固定，充值/未用完都不结转")
 
 
+PER_RE = re.compile(r"^per(\d+)(Hour|Day|Week|Month)(Percentage|ResetTime)$")
+UNIT_HOURS = {"Hour": 1, "Day": 24, "Week": 168, "Month": 720}
+UNIT_CN = {"Hour": "小时", "Day": "天", "Week": "周", "Month": "月"}
+
+
+def bailian_windows(data: dict) -> list[dict]:
+    """把 per5HourPercentage / per5HourResetTime 这类扁平字段还原成窗口列表。"""
+    windows: dict[str, dict] = {}
+    for field, value in data.items():
+        match = PER_RE.match(field)
+        if not match or not isinstance(value, (int, float)):
+            continue
+        count, unit, kind = match.groups()
+        key = f"per{count}{unit}"
+        item = windows.setdefault(
+            key, {"count": int(count), "unit": unit, "percentage": None, "reset_ms": None}
+        )
+        if kind == "Percentage":
+            item["percentage"] = float(value)
+        else:
+            item["reset_ms"] = value
+    return sorted(
+        windows.values(), key=lambda w: w["count"] * UNIT_HOURS.get(w["unit"], 0)
+    )
+
+
+def render_bailian(data: dict) -> None:
+    now = dt.datetime.now()
+    print("== 百炼 Token Plan (ccb/ccq) ==  bl usage token-plan")
+    print()
+
+    windows = bailian_windows(data)
+    if not data.get("hasQuotaData") or not windows:
+        print("⚠️  套餐异常：控制台没有返回额度数据（hasQuotaData=false）")
+        print("    ccb/ccq 当前不可用，常见原因：")
+        print("    - 套餐已过期或未续费")
+        print("    - Console 登录的阿里云账号 ≠ 购买套餐的账号")
+        print("    - key 已失效（模型端点会直接 403 AccessDenied.Unpurchased）")
+        print("    排查: bl auth status / 百炼控制台 Token Plan 页面")
+        return
+
+    rows = []
+    for window in windows:
+        percentage = window["percentage"]
+        reset_ms = window["reset_ms"]
+        reset_text = "-"
+        left_text = "-"
+        if isinstance(reset_ms, (int, float)):
+            reset_text = fmt_time(int(reset_ms), now, "ms")
+            left_text = fmt_left((reset_ms - now.timestamp() * 1000) / 1000)
+        label = f"{window['count']}{UNIT_CN.get(window['unit'], window['unit'])}"
+        pct_text = f"{percentage * 100:.1f}%" if percentage is not None else "?"
+        rows.append([label, pct_text, reset_text, left_text])
+    print_table(["窗口", "剩余", "重置时间", "倒计时"], rows)
+
+
+PROVIDERS = (
+    ("ark", "Ark key 池", fetch_ark, render_ark),
+    ("minimax", "MiniMax Token Plan", fetch_minimax, render_minimax),
+    ("bailian", "百炼 Token Plan", fetch_bailian, render_bailian),
+)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="查看本机 LLM 额度：Ark key 池 + MiniMax Token Plan"
+        description="查看本机 LLM 额度：Ark key 池 + MiniMax Token Plan + 百炼 Token Plan"
     )
     parser.add_argument("--ark", action="store_true", help="只看 Ark key 池")
     parser.add_argument("--minimax", action="store_true", help="只看 MiniMax Token Plan")
+    parser.add_argument("--bailian", action="store_true", help="只看百炼 Token Plan")
     parser.add_argument("--raw", action="store_true", help="输出原始 JSON")
     args = parser.parse_args()
 
-    only_ark = args.ark and not args.minimax
-    only_minimax = args.minimax and not args.ark
+    selected = {"ark": args.ark, "minimax": args.minimax, "bailian": args.bailian}
+    if not any(selected.values()):
+        selected = {key: True for key in selected}
 
     result: dict[str, object] = {}
     failures = 0
+    printed = False
 
-    if not only_minimax:
-        data, error = fetch_ark()
-        result["ark"] = data if error is None else {"error": error}
+    for key, title, fetch, render in PROVIDERS:
+        if not selected[key]:
+            continue
+        data, error = fetch()
+        result[key] = data if error is None else {"error": error}
         if error is None:
             if not args.raw:
-                render_ark(data)
-        else:
-            failures += 1
-            print(f"== Ark key 池 ==\n⚠️  查询失败: {error}\n", file=sys.stderr)
-
-    if not only_ark:
-        data, error = fetch_minimax()
-        result["minimax"] = data if error is None else {"error": error}
-        if error is None:
-            if not args.raw:
-                if not only_minimax:
+                if printed:
                     print()
-                render_minimax(data)
+                render(data)
         else:
             failures += 1
-            print(f"== MiniMax Token Plan ==\n⚠️  查询失败: {error}\n", file=sys.stderr)
+            print(f"⚠️  {title} 查询失败: {error}", file=sys.stderr)
+            continue
+        printed = True
 
     if args.raw:
         print(json.dumps(result, indent=2, ensure_ascii=False))
