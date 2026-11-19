@@ -1,10 +1,16 @@
-# ⚠️ STALE -- do not apply. This manifest predates the 2026-11 service
-# extraction: it still pulls the quant-scorer image and starts a script that
-# only ever existed in the pre-split repo (start.researcher.sh / start.portfolio.sh
-# / start.factor-researcher.sh, all removed on 2026-11-19). The Compose path in
-# ../../apps is what runs today. Rewrite against the owning repository
-# (quant-portfolio-research / quant-factor-research / quant-portfolio) before
-# using this again.
+# ⏸ PAUSED -- kept deliberately, not applied today.
+#
+# This manifest predates the 2026-11 service extraction and needs two updates
+# before it can run again:
+#   1. point it at the owning repository's image (quant-portfolio-research /
+#      quant-factor-research / quant-portfolio), not the quant-scorer image the
+#      deploy helper still maps it to;
+#   2. start the entrypoint that repository actually ships -- this one names
+#      start.researcher.sh / start.portfolio.sh / start.factor-researcher.sh,
+#      all removed from the scorer image on 2026-11-19.
+#
+# The Compose path under ../../apps is what runs in the meantime. The stack is
+# NOT dead: it stays for the k8s route to be revived later.
 # Standalone Alpha158 factor backtest worker (external_k8s).
 
 # Consumes quant_trading.factor_backtest_jobs via MONGO_URI in Secret
