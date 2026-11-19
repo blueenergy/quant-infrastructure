@@ -1,5 +1,12 @@
+# ⚠️ STALE -- do not apply. This manifest predates the 2026-11 service
+# extraction: it still pulls the quant-scorer image and starts a script that
+# only ever existed in the pre-split repo (start.researcher.sh / start.portfolio.sh
+# / start.factor-researcher.sh, all removed on 2026-11-19). The Compose path in
+# ../../apps is what runs today. Rewrite against the owning repository
+# (quant-portfolio-research / quant-factor-research / quant-portfolio) before
+# using this again.
 # Standalone portfolio research worker (external_k8s).
-# Same stock-scoring-system image as Compose quant-researcher.
+
 # Consumes quant_trading.portfolio_research_jobs via MONGO_URI in Secret
 # "quant-secrets". Do not also run Compose profile research-local against
 # the same Mongo queue (set PORTFOLIO_RESEARCH_RUNTIME=external_k8s).
