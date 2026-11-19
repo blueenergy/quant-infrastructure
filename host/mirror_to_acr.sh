@@ -54,9 +54,10 @@ PUSH_TIMEOUT=${PUSH_TIMEOUT:-900}
 
 # ACR repo | ghcr image | app repo directory (used to resolve the newest tag).
 # The local directory name is spelled out because it does not always match the
-# image name (stock-scoring-system -> quant-scorer, quantFinance -> quant-api).
+# image name (quantFinance -> quant-api). stock-scoring-system was renamed to
+# quant-scorer on 2026-11-19, so the ghcr and directory names now agree.
 IMAGE_MAP=(
-  "wukongquant/quant-scorer|ghcr.io/blueenergy/stock-scoring-system|stock-scoring-system"
+  "wukongquant/quant-scorer|ghcr.io/blueenergy/quant-scorer|quant-scorer"
   "wukongquant/quant-api|ghcr.io/blueenergy/quant-api|quantFinance"
   "wukongquant/quant-dashboard|ghcr.io/blueenergy/quant-dashboard|quantFinance-dashboard"
   "wukongquant/quant-analyzer|ghcr.io/blueenergy/quant-analyzer|quantAnalyzer"
