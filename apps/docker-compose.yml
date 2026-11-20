@@ -228,6 +228,11 @@ services:
       - TZ=Asia/Shanghai
       - PORTFOLIO_RESEARCH_REPORT_DIR=/app/reports/portfolio-research
       - PORTFOLIO_RESEARCH_RUNTIME=${PORTFOLIO_RESEARCH_RUNTIME:-local_docker}
+      # Lets a research job backtest a model_id from quant_ml.model_predictions
+      # (analysis/core/model_scores.py returns an empty frame while this is off,
+      # which silently leaves model_score all-NaN). Only jobs that name a
+      # model_id are affected; every score-spec job takes the existing path.
+      - MODEL_SCORE_ADAPTER_ENABLED=1
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
