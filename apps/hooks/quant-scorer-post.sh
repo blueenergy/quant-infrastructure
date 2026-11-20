@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # Post-deploy hook for quant-scorer.
 # Mirrors the `portfolio-db-maintenance` job from the old CI pipeline:
-#   1. ensure_portfolio_indexes  — idempotent index creation / migration
-#   2. seed_portfolio_param_presets — seed default parameter presets
+#   seed_portfolio_param_presets — seed default parameter presets
+#
+# The index-creation step (ensure_portfolio_indexes.py) is gone: quant-scorer
+# archived that tool and .dockerignore deliberately excludes archive/, so the
+# call could never resolve. Portfolio indexes are maintained at runtime by
+# portfolio.db.ensure_trading_indexes in the daily enqueue job, and the live
+# collections already carry them.
 #
 # Runs from apps/ directory (set by deploy.sh).
 set -euo pipefail
@@ -32,9 +37,6 @@ run_tool() {
 # which only resolves on the shared Docker network (same as quant-api-pre.sh).
 log "Ensuring shared Docker network"
 docker network inspect quant-network >/dev/null 2>&1 || docker network create quant-network
-
-log "Ensuring portfolio indexes (image: $IMAGE)"
-run_tool python tools/ops/ensure_portfolio_indexes.py
 
 log "Seeding portfolio parameter presets"
 run_tool python tools/ops/seed_portfolio_param_presets.py --apply
