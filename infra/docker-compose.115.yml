@@ -9,7 +9,8 @@ services:
     # 2026-11-07 升 7.0，与本机 rs0 primary 对齐（原注释「Primary 为 6.0 时
     # Secondary 必须同大版本」已随 115 独立单成员 rs0 失效）。
     # 先只换镜像、FCV 保持 6.0；观察后再 setFeatureCompatibilityVersion。
-    image: mongo:7.0
+    # Keep this digest in sync with docker-compose.yml on upgrades.
+    image: mongo@sha256:41e8195b2791692695e1dc9bd21cd51d0a3af05fff8ace9304a5c1acf94f1ae1
     volumes: !override
       - mongodb7_data:/data/db
       - mongodb7_config:/data/configdb

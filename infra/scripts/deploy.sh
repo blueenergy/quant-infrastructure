@@ -40,7 +40,7 @@ set +a
 
 # 确认部署
 echo "📋 Deployment Configuration:"
-echo "  • MongoDB: mongo:7.0"
+echo "  • MongoDB: 7.0.48 (digest pinned in docker-compose.yml)"
 echo "    - Auth: enabled"
 echo "  • Memory Limits:"
 echo "    - MongoDB: 1.5GB (reserved: 800MB)"

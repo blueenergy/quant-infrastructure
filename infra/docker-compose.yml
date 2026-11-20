@@ -10,7 +10,12 @@ services:
   # 115 Secondary：docker compose -f docker-compose.yml -f docker-compose.115.yml up -d mongodb
   # ========================
   mongodb:
-    image: mongo:7.0
+    # Digest-pinned (7.0.48). With a floating `mongo:7.0` tag every
+    # `docker compose pull` recreated this container whenever Docker Hub
+    # republished the tag, including during a plain app release. Upgrade
+    # intentionally, outside A-share hours; see
+    # llm-wiki projects/trading/ops/mongo-floating-tag-recreate-20261120.md.
+    image: mongo@sha256:41e8195b2791692695e1dc9bd21cd51d0a3af05fff8ace9304a5c1acf94f1ae1
     container_name: quant-mongodb
     hostname: mongodb
     ports:
