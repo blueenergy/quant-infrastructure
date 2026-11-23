@@ -62,13 +62,15 @@ spec:
             - name: MAX_WORKERS
               value: "12"
             # Daily run + mark_scoring_run universe list (comma-separated, no spaces).
-            # Default in the image is five indices (no csi2000); keep explicit here so
-            # K8s matches Compose prod intent. Six-index union ~3.8k symbols; peak RAM
-            # ~13–14Gi — limits below leave headroom vs the old 8Gi Compose default.
+            # Narrowed to csi1000 on 2026-11-23: the only consumer of daily scores
+            # in production is the csi1000 portfolio strategy, and the other five
+            # indices have zero overlap with csi1000 (their scores were 2831
+            # symbols/day of pure compute). Restore the wider list here and in
+            # apps/env/quant-scorer.env together.
             - name: SCORING_CORE_INDEX_CODES
-              value: "hs300,a500,csi500,csi1000,csi2000,star50"
+              value: "csi1000"
             - name: SCORING_RUN_UNIVERSE_INDEXES
-              value: "hs300,a500,csi500,csi1000,csi2000,star50"
+              value: "csi1000"
             - name: MONGO_URL
               valueFrom:
                 secretKeyRef:
