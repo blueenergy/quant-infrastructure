@@ -431,6 +431,32 @@ run_hook() {
   fi
 }
 
+# An interrupted `compose up` can leave a project-prefixed container
+# (<12-hex project>_<service>) in Created state. It holds the container_name
+# the compose file wants, so the next up fails with
+# "Conflict. The container name ... is already in use" and the API services
+# stay in Created (2026-11-23). Only Created containers are removed; running
+# and exited release containers stay on compose's normal recreate path.
+cleanup_created_shadow_containers() {
+  local -a targets=("$@")
+  docker ps -a --filter status=created --format '{{.Names}}' | while read -r name; do
+    [[ "$name" =~ ^[0-9a-f]{12}_(.+)$ ]] || continue
+    local svc="${BASH_REMATCH[1]}"
+    if [ "${#targets[@]}" -eq 0 ]; then
+      log "Removing stale created container ${name}"
+      docker rm -f "$name" >/dev/null || true
+      continue
+    fi
+    for t in "${targets[@]}"; do
+      if [ "$t" = "$svc" ]; then
+        log "Removing stale created container ${name}"
+        docker rm -f "$name" >/dev/null || true
+        break
+      fi
+    done
+  done
+}
+
 # Drop superseded release images, keeping a rollback window.
 #
 # Scoped to ${ACR_REGISTRY}/wukongquant/*:sha-* on purpose. A blanket
@@ -651,6 +677,7 @@ main() {
     [ "${#SCALE_FLAGS[@]}" -gt 0 ] && log "Scale flags: ${SCALE_FLAGS[*]}"
     log "Pulling all service images"
     "${COMPOSE[@]}" pull
+    cleanup_created_shadow_containers
     log "Bringing up all services"
     "${COMPOSE[@]}" up "${up_flags[@]}" "${SCALE_FLAGS[@]}"
   else
@@ -662,6 +689,7 @@ main() {
     done
     log "Pulling images for: ${SERVICES[*]}"
     "${COMPOSE[@]}" pull "${SERVICES[@]}"
+    cleanup_created_shadow_containers "${SERVICES[@]}"
     log "Bringing up: ${SERVICES[*]}"
     # --no-deps so we never restart unrelated services during a targeted roll.
     "${COMPOSE[@]}" up "${up_flags[@]}" --no-deps "${SCALE_FLAGS[@]}" "${SERVICES[@]}"
