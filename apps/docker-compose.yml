@@ -171,9 +171,8 @@ services:
 
   # [MIGRATED] Scoring-only role from the stock-scoring-system image. Profile
   # scorer-local keeps the singleton scheduler on this host; omit it when
-  # QUANT_SCORER_RUNTIME=external_k8s. Post-deploy DB maintenance runs once via
-  # apps/hooks/quant-scorer-post.sh (ensure_portfolio_indexes +
-  # seed_portfolio_param_presets).
+  # QUANT_SCORER_RUNTIME=external_k8s. The post-deploy hook only ensures the
+  # shared network; portfolio DB maintenance moved with the portfolio service.
   quant-scorer:
     image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-scorer:${QUANT_SCORER_IMAGE_TAG:-latest}
     container_name: quant-scorer
