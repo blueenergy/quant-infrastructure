@@ -583,7 +583,7 @@ check_disk_pressure() {
 # so the check is mechanical now instead of relying on remembering the flag.
 check_trader_mailboxes() {
   local svc container src expect target
-  for svc in quant-trader quant-trader-live; do
+  for svc in quant-trader quant-trader-live quant-trader-guosen; do
     if [ "${#SERVICES[@]}" -gt 0 ]; then
       target=0
       for t in "${SERVICES[@]}"; do
@@ -605,8 +605,9 @@ check_trader_mailboxes() {
       continue
     fi
     case "$svc" in
-      quant-trader)      expect="/mnt/e/国金QMT交易端模拟/" ;;
-      quant-trader-live) expect="/mnt/d/国金证券QMT交易端/" ;;
+      quant-trader)         expect="/mnt/e/国金QMT交易端模拟/" ;;
+      quant-trader-live)    expect="/mnt/d/国金证券QMT交易端/" ;;
+      quant-trader-guosen)  expect="/mnt/d/国信iQuant策略交易平台/" ;;
     esac
     case "$src" in
       "$expect"*) : ;;

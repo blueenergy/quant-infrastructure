@@ -560,6 +560,35 @@ services:
         max-size: "50m"
         max-file: "3"
 
+  # 国信 iQuant 交易端（实盘）。与 quant-trader-live 并行，互不干扰：
+  # 它是**另一个证券账户**（330030210437），信号按 securities_account_id 隔离。
+  # iQuant 侧只跑 BIGQMT_TRADE_FILE（quote 仍走国金）；trade 策略自己答
+  # get_full_tick，所以不需要第二个 quote 模型。
+  # client_id 必须与 live 不同：两个容器共用一个 client_id 会互相覆盖 req.json。
+  quant-trader-guosen:
+    image: crpi-gv3f6mfcrw75qane.cn-hangzhou.personal.cr.aliyuncs.com/wukongquant/quant-trader:${QUANT_TRADER_IMAGE_TAG:-latest}
+    container_name: quant-trader-guosen
+    profiles: ["trader-local"]
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TZ=Asia/Shanghai
+      - QUANT_TRADER_EXECUTION_OUTBOX_PATH=/app/data/execution_outbox.json
+    volumes:
+      # 配置在 apps/state/（已 gitignore）。下单闸门 rpc_allow_order_methods 是
+      # 唯一的总开关：false 时客户端侧直接拒发 ORDER_METHODS（redis_rpc.py:464），
+      # 策略侧烘焙值必须同时为 True。
+      - ./state/quant-trader-guosen/config.json:/app/config/config.json:ro
+      # 国信 iQuant 的 bqbox；策略侧 file.root=bqbox/trade
+      - /mnt/d/国信iQuant策略交易平台/bin.x64/bqbox:/app/bqbox
+      - ./state/quant-trader-guosen/data:/app/data
+      - ./state/quant-trader-guosen/logs:/root/.local/share/quantTrader/logs
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
   # [MIGRATED] Mirrors CI deploy: add-host for same-host API calls, cache
   # volume, log rotation, layered env.
   backtest-worker:

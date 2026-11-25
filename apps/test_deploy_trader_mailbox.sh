@@ -29,6 +29,7 @@ run_body() {
       case "$container" in
         quant-trader) echo -n "${E_MAILBOX:-/mnt/e/国金QMT交易端模拟/bin.x64/bqbox}" ;;
         quant-trader-live) echo -n "${D_MAILBOX:-/mnt/d/国金证券QMT交易端/bin.x64/bqbox}" ;;
+        quant-trader-guosen) echo -n "${G_MAILBOX:-/mnt/d/国信iQuant策略交易平台/bin.x64/bqbox}" ;;
         *) return 1 ;;
       esac
     }
@@ -38,11 +39,18 @@ run_body() {
 
 echo "== check_trader_mailboxes"
 
-out="$(run_body 'SERVICES=(quant-trader quant-trader-live); check_trader_mailboxes')"
+out="$(run_body 'SERVICES=(quant-trader quant-trader-live quant-trader-guosen); check_trader_mailboxes')"
 if printf '%s' "$out" | grep -q "WARN"; then
   fail "correct mounts should not warn: $out"
 else
   pass "correct mounts pass silently"
+fi
+
+out="$(run_body 'SERVICES=(quant-trader-guosen); G_MAILBOX=/mnt/d/国金证券QMT交易端/bin.x64/bqbox; check_trader_mailboxes')"
+if printf '%s' "$out" | grep -q "quant-trader-guosen: /app/bqbox -> /mnt/d/国金证券"; then
+  pass "guosen mounted on the Guojin mailbox is flagged"
+else
+  fail "guosen mounted on the Guojin mailbox should be flagged: $out"
 fi
 
 out="$(run_body 'SERVICES=(quant-trader); E_MAILBOX=/mnt/d/国金QMT交易端模拟/bin.x64/bqbox; check_trader_mailboxes')"
